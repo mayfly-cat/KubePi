@@ -47,7 +47,7 @@
     </div>
     <div class="login-container" v-if="!mfaPage">
       <el-row type="flex" v-loading="loading">
-        <el-col :span="12">
+        <el-col :span="24">
           <el-form :model="form" :rules="rules" ref="form" size="default">
             <div class="login-title">
               {{ systemName }}
@@ -72,9 +72,6 @@
               </el-button>
             </div>
           </el-form>
-        </el-col>
-        <el-col :span="12">
-          <div class="login-image"></div>
         </el-col>
       </el-row>
     </div>
