@@ -106,7 +106,7 @@ const message = {
         login: {
             username_or_email: "username or email",
             password: "password",
-            title: "login KubePi",
+            title: "Login Gateway Manager",
             welcome: "Welcome back, please enter your user name and password to log in",
             expires: "The authentication information has expired. Please log in again.",
             mfa_helper: "Scan the QR code below with the MFA Authenticator app to get a 6-digit verification code",
