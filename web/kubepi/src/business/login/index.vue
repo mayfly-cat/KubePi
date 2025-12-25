@@ -229,13 +229,13 @@ export default {
   }
 
   .login-container {
-    min-width: 640px;
-    width: 960px;
+    min-width: 400px;
+    width: 500px;
     height: 480px;
     background-color: #FFFFFF;
     box-shadow: 0 5px 5px -3px rgba(0, 0, 0, .2), 0 8px 10px 1px rgba(0, 0, 0, .14), 0 3px 14px 2px rgba(0, 0, 0, .12);
     @media only screen and (max-width: 1280px) {
-      width: 900px;
+      width: 450px;
       height: 380px;
     }
 
