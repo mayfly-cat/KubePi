@@ -256,6 +256,22 @@ const message = {
           images: "Image List",
           push_image: "Push the mirror to the current project",
           version: "Version",
+        },
+        tools: {
+          title: "Tools Center",
+          quick_access: "Quick Access",
+          grafana: {
+            title: "Grafana Monitoring",
+            description: "View cluster monitoring metrics and performance data"
+          },
+          logs: {
+            title: "Log Dashboard",
+            description: "View and analyze application logs"
+          },
+          tracing: {
+            title: "Tracing",
+            description: "Trace request links in distributed systems"
+          }
         }
     },
 }

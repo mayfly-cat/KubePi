@@ -256,6 +256,22 @@ const message = {
           images: "镜像列表",
           push_image: "推送镜像到当前项目",
           version: "版本",
+        },
+        tools: {
+          title: "工具中心",
+          quick_access: "快速访问",
+          grafana: {
+            title: "Grafana监控",
+            description: "查看集群监控指标和性能数据"
+          },
+          logs: {
+            title: "日志看板",
+            description: "查看和分析应用日志"
+          },
+          tracing: {
+            title: "链路追踪",
+            description: "追踪分布式系统的请求链路"
+          }
         }
     },
 }

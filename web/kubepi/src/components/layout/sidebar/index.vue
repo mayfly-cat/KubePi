@@ -16,9 +16,6 @@
                       :base-path="route.path"/>
       </el-menu>
     </el-scrollbar>
-    <el-row style="text-align: center">
-      <el-button style="font-size:14px; margin-top: -10px" type="text" @click="openApi">{{ $t('commons.personal.copy_right') }}</el-button>
-    </el-row>
   </div>
 </template>
 
@@ -33,11 +30,7 @@ export default {
   data () {
     return {}
   },
-  methods: {
-    openApi(){
-      window.open("https://www.fit2cloud.com/", "_blank");
-    }
-  },
+  methods: {},
   computed: {
     ...mapGetters([
       "permission_routes",
