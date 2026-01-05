@@ -62,6 +62,9 @@
             <el-tab-pane :label="$t('business.network.relationship_chart')"  v-if="Object.keys(item.spec).length!==0">
               <KoIngressRelationshipChart :namespace="namespace" :cluster="cluster" :ingressObject="yaml" ></KoIngressRelationshipChart>
             </el-tab-pane>
+            <el-tab-pane :label="$t('business.ingress.history')">
+              <ingress-history :cluster="cluster" :namespace="namespace" :ingress-name="name"></ingress-history>
+            </el-tab-pane>
           </el-tabs>
         </el-col>
       </el-row>
@@ -86,10 +89,11 @@ import * as x509 from "@peculiar/x509";
 import { datetimeFormat } from "fit2cloud-ui/src/filters/time"
 
 import KoIngressRelationshipChart from "@/components/ko-network/ingress-relationship-chart.vue"
+import IngressHistory from "./history"
 
 export default {
   name: "IngressDetail",
-  components: { KoDetailBasic, KoResourceRule, LayoutContent, YamlEditor,KoIngressRelationshipChart },
+  components: { KoDetailBasic, KoResourceRule, LayoutContent, YamlEditor, KoIngressRelationshipChart, IngressHistory },
   props: {
     name: String,
     namespace: String

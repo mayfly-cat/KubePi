@@ -1,10 +1,12 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -18,6 +20,7 @@ import (
 	"github.com/KubeOperator/kubepi/internal/service/v1/cluster"
 	"github.com/KubeOperator/kubepi/internal/service/v1/clusterbinding"
 	"github.com/KubeOperator/kubepi/internal/service/v1/common"
+	ingresshistory "github.com/KubeOperator/kubepi/internal/service/v1/ingresshistory"
 	pkgV1 "github.com/KubeOperator/kubepi/pkg/api/v1"
 	"github.com/KubeOperator/kubepi/pkg/kubernetes"
 	"github.com/kataras/iris/v12"
@@ -36,6 +39,103 @@ func NewHandler() *Handler {
 		clusterService:        cluster.NewService(),
 		clusterBindingService: clusterbinding.NewService(),
 	}
+}
+
+// saveIngressHistoryIfNeeded 如果是 Ingress 的 PUT 请求，保存历史版本
+func (h *Handler) saveIngressHistoryIfNeeded(ctx *context.Context, name string, proxyPath string, requestBody []byte, profile session.UserProfile) error {
+	// 检查是否是 Ingress 的 PUT 请求
+	if !strings.Contains(proxyPath, "ingresses") || ctx.Request().Method != http.MethodPut {
+		return nil
+	}
+
+	// 解析路径获取 namespace 和 ingress name
+	// 路径格式: /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses/{name}
+	parts := strings.Split(proxyPath, "/")
+	var namespace, ingressName string
+	for i, part := range parts {
+		if part == "namespaces" && i+1 < len(parts) {
+			namespace = parts[i+1]
+		}
+		if part == "ingresses" && i+1 < len(parts) {
+			ingressName = parts[i+1]
+			break
+		}
+	}
+
+	if namespace == "" || ingressName == "" {
+		return nil // 不是标准的 Ingress 路径，跳过
+	}
+
+	// 获取当前的 Ingress 配置（在更新之前）
+	c, err := h.clusterService.Get(name, common.DBOptions{})
+	if err != nil {
+		return fmt.Errorf("get cluster failed: %w", err)
+	}
+
+	ts, err := h.generateTLSTransport(c, profile)
+	if err != nil {
+		return fmt.Errorf("generate transport failed: %w", err)
+	}
+
+	httpClient := http.Client{Transport: ts}
+	k := kubernetes.NewKubernetes(c)
+	clusterVersionMinor, err := k.VersionMinor()
+	if err != nil {
+		return fmt.Errorf("get cluster version failed: %w", err)
+	}
+
+	// 构建获取当前 Ingress 的 URL
+	getPath := proxyPath
+	compatibleClusterVersion(clusterVersionMinor, &getPath)
+	getUrl := fmt.Sprintf("%s%s", c.Spec.Connect.Forward.ApiServer, getPath)
+
+	getReq, err := http.NewRequest(http.MethodGet, getUrl, nil)
+	if err != nil {
+		return fmt.Errorf("create get request failed: %w", err)
+	}
+
+	getResp, err := httpClient.Do(getReq)
+	if err != nil {
+		// 如果获取失败（可能是新创建的），不保存历史
+		return nil
+	}
+	defer getResp.Body.Close()
+
+	if getResp.StatusCode != http.StatusOK {
+		// 如果当前 Ingress 不存在，不保存历史
+		return nil
+	}
+
+	currentIngressData, err := ioutil.ReadAll(getResp.Body)
+	if err != nil {
+		return fmt.Errorf("read current ingress failed: %w", err)
+	}
+
+	// 解析当前 Ingress 数据
+	var currentIngress interface{}
+	if err := json.Unmarshal(currentIngressData, &currentIngress); err != nil {
+		return fmt.Errorf("parse current ingress failed: %w", err)
+	}
+
+	// 保存历史版本
+	ingressHistoryService := ingresshistory.NewService()
+	_, err = ingressHistoryService.SaveHistory(
+		name,
+		namespace,
+		ingressName,
+		currentIngress,
+		profile.Name,
+		"Auto saved before update",
+		common.DBOptions{},
+	)
+
+	if err != nil {
+		// 保存历史失败不应该阻止更新操作，只记录错误
+		// 这里可以选择记录日志
+		return nil
+	}
+
+	return nil
 }
 
 type NamespaceResourceContainer struct {
@@ -156,7 +256,24 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 			apiUrl.Path = addUrlNamespace(apiUrl.Path, namespace)
 		}
 
-		req, err := http.NewRequest(ctx.Request().Method, apiUrl.String(), ctx.Request().Body)
+		// 对于 PUT 请求，需要先读取请求体（可能用于保存历史）
+		var requestBody []byte
+		if requestMethod == http.MethodPut || requestMethod == http.MethodPost || requestMethod == http.MethodPatch {
+			requestBody, _ = ctx.GetBody()
+		}
+
+		// 如果是 Ingress 的 PUT 请求，保存历史版本
+		if requestMethod == http.MethodPut {
+			_ = h.saveIngressHistoryIfNeeded(ctx, name, proxyPath, requestBody, profile)
+		}
+
+		// 重新创建请求体（因为已经读取过了）
+		var bodyReader io.Reader
+		if len(requestBody) > 0 {
+			bodyReader = bytes.NewReader(requestBody)
+		}
+
+		req, err := http.NewRequest(ctx.Request().Method, apiUrl.String(), bodyReader)
 		if err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", err)

@@ -15,9 +15,6 @@
                               :item="route"
                               :base-path="route.path"/>
             </el-menu>
-            <div v-if="!isCollapse">
-              <el-button class="copyRight" style="" type="text" @click="openApi">{{ $t('commons.personal.copy_right') }}</el-button>
-            </div>
         </el-scrollbar>
 
     </div>
@@ -34,11 +31,7 @@
         data() {
             return {}
         },
-        methods: {
-          openApi(){
-            window.open("https://www.fit2cloud.com/", "_blank");
-          }
-        },
+        methods: {},
         computed: {
             ...mapGetters([
                 "permission_routes",

@@ -13,6 +13,7 @@ import (
 	"github.com/KubeOperator/kubepi/internal/server"
 
 	"github.com/KubeOperator/kubepi/internal/api/v1/file"
+	"github.com/KubeOperator/kubepi/internal/api/v1/ingresshistory"
 	"github.com/kataras/iris/v12/middleware/jwt"
 
 	"github.com/KubeOperator/kubepi/internal/api/v1/chart"
@@ -447,4 +448,5 @@ func AddV1Route(app iris.Party) {
 	ldap.Install(authParty)
 	imagerepo.Install(authParty)
 	file.Install(authParty)
+	ingresshistory.Install(authParty)
 }
