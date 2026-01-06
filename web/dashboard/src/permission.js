@@ -68,7 +68,7 @@ router.beforeEach(async (to, from, next) => {
                 NProgress.done()
                 document.title = q["cluster"] || "GVP"
             } else {
-                window.open("/kubepi", '_self');
+                window.open("/gvp", '_self');
             }
         } else {
             await store.dispatch("user/setCurrentCluster", to.query["cluster"])
@@ -76,7 +76,7 @@ router.beforeEach(async (to, from, next) => {
         }
         await generateRoutes(to, from, next)
     } else {
-        window.open("/kubepi", '_self');
+        window.open("/gvp", '_self');
         NProgress.done()
     }
 })

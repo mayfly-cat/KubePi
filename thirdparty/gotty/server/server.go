@@ -37,7 +37,6 @@ type Server struct {
 	cache            token.Cache
 }
 
-
 // New creates a new instance of Server.
 // Server will use the New() of the factory provided to handle each request.
 func New(factory Factory, options *Options, redisOptions *RedisOptions) (*Server, error) {
@@ -115,7 +114,7 @@ func (server *Server) Run(ctx context.Context, options ...RunOption) error {
 	}
 
 	counter := newCounter(time.Duration(server.options.Timeout) * time.Second)
-	path := "/kubepi/webkubectl/"
+	path := "/gvp/webkubectl/"
 	customPath := os.Getenv("TERMINAL_PATH")
 	if len(customPath) > 0 {
 		path = customPath

@@ -50,10 +50,26 @@ RUN ARCH=$(uname -m) \
         *) echo "Unsupported architecture: $ARCH"; exit 1;; \
     esac \
     && echo "Detected ARCH: $ARCH" \
-    && apk add --update --no-cache bash bash-completion curl wget openssl iputils busybox-extras vim tini \
+    && apk add --update --no-cache bash bash-completion curl wget openssl iputils busybox-extras vim tini ca-certificates \
     && sed -i "s/nobody:\//nobody:\/nonexistent/g" /etc/passwd \
-    && curl -sLf https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl/v1.22.1/${ARCH}/kubectl -o /usr/bin/kubectl \
+    && KUBECTL_URL="https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl/v1.22.1/${ARCH}/kubectl" \
+    && echo "Downloading kubectl from: $KUBECTL_URL" \
+    && for i in 1 2 3; do \
+        if curl -sLf --connect-timeout 10 --max-time 30 "$KUBECTL_URL" -o /usr/bin/kubectl; then \
+            echo "kubectl downloaded successfully (attempt $i)"; \
+            break; \
+        else \
+            echo "kubectl download failed (attempt $i), exit code: $?"; \
+            if [ $i -eq 3 ]; then \
+                echo "ERROR: Failed to download kubectl after 3 attempts"; \
+                echo "Trying alternative method with wget..."; \
+                wget --timeout=30 --tries=3 "$KUBECTL_URL" -O /usr/bin/kubectl || exit 1; \
+            fi; \
+            sleep 2; \
+        fi; \
+    done \
     && chmod +x /usr/bin/kubectl \
+    && /usr/bin/kubectl version --client --short || echo "Warning: kubectl version check failed" \
     && echo "kubectl installed successfully"
 
 # 安装 kubectl-aliases
@@ -64,22 +80,51 @@ RUN cd /opt/ \
     && chmod -R 755 kubectl-aliases \
     || (echo "Failed to install kubectl-aliases" && exit 1)
 
-# 安装 fzf
-RUN cd /opt/ \
-    && wget -q --show-progress --progress=bar:force https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/fzf/0.21.0/fzf.tar.gz \
-    && tar zxvf fzf.tar.gz \
-    && rm -rf fzf.tar.gz \
-    && chmod -R 755 fzf \
-    && if [ -f fzf/install ]; then \
-        (cd fzf && ./install --bin || echo "fzf install script completed with warnings"); \
+# 安装 fzf (可选，如果安装失败则跳过)
+RUN ARCH=$(uname -m) \
+    && case $ARCH in \
+        aarch64) ARCH="arm64";; \
+        x86_64) ARCH="amd64";; \
+        *) ARCH="amd64";; \
+    esac \
+    && cd /opt/ \
+    && if wget -q --show-progress --progress=bar:force https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/fzf/0.21.0/fzf.tar.gz; then \
+        tar zxvf fzf.tar.gz \
+        && rm -rf fzf.tar.gz \
+        && echo "Listing /opt/ contents after extraction:" \
+        && ls -la /opt/ \
+        && echo "Listing fzf directory contents:" \
+        && (ls -la fzf/ 2>/dev/null || echo "fzf directory not found") \
+        && chmod -R 755 fzf 2>/dev/null || true \
+        && if [ -f fzf/install ]; then \
+            echo "Running fzf install script..." \
+            && (cd fzf && ./install --bin 2>&1 || echo "fzf install script completed with warnings"); \
+        else \
+            echo "fzf install script not found, searching for binary..."; \
+        fi \
+        && FZF_BINARY="" \
+        && if [ -f fzf/bin/fzf ]; then \
+            FZF_BINARY="fzf/bin/fzf"; \
+        elif [ -f fzf/fzf ]; then \
+            FZF_BINARY="fzf/fzf"; \
+        else \
+            FZF_FOUND=$(find fzf -name "fzf" -type f 2>/dev/null | head -1) \
+            && if [ -n "$FZF_FOUND" ]; then \
+                FZF_BINARY="$FZF_FOUND"; \
+            fi; \
+        fi \
+        && if [ -n "$FZF_BINARY" ] && [ -f "$FZF_BINARY" ]; then \
+            echo "Found fzf binary at: $FZF_BINARY" \
+            && chmod +x "$FZF_BINARY" \
+            && ln -sf "/opt/$FZF_BINARY" /usr/local/bin/fzf \
+            && echo "fzf installed successfully"; \
+        else \
+            echo "WARNING: fzf binary not found. Directory structure:" \
+            && find /opt -name "*fzf*" 2>/dev/null || echo "No fzf files found" \
+            && echo "fzf installation skipped, continuing build..."; \
+        fi; \
     else \
-        echo "fzf install script not found, using binary directly"; \
-    fi \
-    && if [ -f fzf/bin/fzf ]; then \
-        ln -sf /opt/fzf/bin/fzf /usr/local/bin/fzf; \
-    else \
-        echo "fzf binary not found in expected location"; \
-        exit 1; \
+        echo "WARNING: Failed to download fzf.tar.gz, skipping fzf installation..."; \
     fi
 
 # 安装 k9s

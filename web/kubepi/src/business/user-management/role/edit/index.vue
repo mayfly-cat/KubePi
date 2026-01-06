@@ -148,7 +148,8 @@ export default {
       this.loading = true
       listApiResource().then(data => {
         for (const key in data.data) {
-          if (key) {
+          // 隐藏镜像仓库资源，因为主页已经没有镜像仓库tab页了
+          if (key && key !== 'imagerepos') {
             const item = {name: key, verbs: []}
             for (const verb of data.data[key]) {
               item.verbs.push({

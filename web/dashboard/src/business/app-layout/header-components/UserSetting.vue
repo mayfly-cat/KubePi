@@ -35,7 +35,7 @@
                         this.exit()
                         break
                     default:
-                        window.open("/kubepi", '_self');
+                        window.open("/gvp", '_self');
                         break
                 }
             },

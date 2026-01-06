@@ -71,7 +71,7 @@ const createRouter = () => new Router({
     scrollBehavior: () => ({y: 0}),
     routes: constantRoutes,
     mode: 'history',
-    base: "kubepi"
+    base: "gvp"
 })
 
 const router = createRouter()

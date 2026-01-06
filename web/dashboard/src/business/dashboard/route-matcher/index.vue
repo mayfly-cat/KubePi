@@ -5,42 +5,41 @@
         <span>{{ $t('business.tools.route_matcher.title') }}</span>
       </div>
       
-      <el-form :model="form" label-width="120px" :rules="rules" ref="form">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item :label="$t('business.cluster.namespace')" prop="namespace">
-              <el-select 
-                v-model="form.namespace" 
-                :placeholder="$t('business.tools.route_matcher.select_namespace')"
-                @change="onNamespaceChange"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="ns in namespaces"
-                  :key="ns"
-                  :label="ns"
-                  :value="ns"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
+      <el-form :model="form" label-width="160px" :rules="rules" ref="form">
+        <el-form-item :label="$t('business.cluster.namespace')" prop="namespace">
+          <el-select 
+            v-model="form.namespace" 
+            :placeholder="$t('business.tools.route_matcher.select_namespace')"
+            @change="onNamespaceChange"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="ns in namespaces"
+              :key="ns"
+              :label="ns"
+              :value="ns"
+            />
+          </el-select>
+        </el-form-item>
         
         <el-form-item :label="$t('business.tools.route_matcher.test_url')" prop="testUrl">
           <el-input 
             v-model="form.testUrl" 
             :placeholder="$t('business.tools.route_matcher.url_placeholder')"
             @keyup.enter.native="matchRoute"
+            style="width: 100%"
+          />
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button 
+            type="primary"
+            icon="el-icon-search" 
+            @click="matchRoute"
+            :loading="matching"
           >
-            <el-button 
-              slot="append" 
-              icon="el-icon-search" 
-              @click="matchRoute"
-              :loading="matching"
-            >
-              {{ $t('business.tools.route_matcher.match') }}
-            </el-button>
-          </el-input>
+            {{ $t('business.tools.route_matcher.match') }}
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -91,10 +90,10 @@
         </el-tag>
       </div>
       
-      <el-table :data="ingressList" border stripe max-height="400">
-        <el-table-column :label="$t('business.tools.route_matcher.ingress_name')" prop="metadata.name" width="200" />
+      <el-table :data="ingressList" border stripe>
+        <el-table-column :label="$t('business.tools.route_matcher.ingress_name')" prop="metadata.name" width="200" show-overflow-tooltip />
         <el-table-column :label="$t('business.cluster.namespace')" prop="metadata.namespace" width="150" />
-        <el-table-column :label="$t('business.tools.route_matcher.rules')" min-width="300">
+        <el-table-column :label="$t('business.tools.route_matcher.rules')" min-width="300" show-overflow-tooltip>
           <template slot-scope="scope">
             <div v-for="(rule, ruleIndex) in scope.row.spec.rules" :key="ruleIndex" style="margin-bottom: 10px">
               <div><strong>{{ $t('business.tools.route_matcher.host') }}:</strong> {{ rule.host || '*' }}</div>
@@ -377,28 +376,7 @@ export default {
     color: #ffffff;
   }
   
-  ::v-deep .el-table {
-    background-color: #1e1e1e;
-    color: #b6c0cd;
-    
-    th {
-      background-color: #1e1e1e;
-      color: #b6c0cd;
-      border-color: #3e4145;
-    }
-    
-    td {
-      border-color: #3e4145;
-    }
-    
-    tr {
-      background-color: #1e1e1e;
-      
-      &:hover {
-        background-color: #2a2d31;
-      }
-    }
-  }
+  
 }
 </style>
 

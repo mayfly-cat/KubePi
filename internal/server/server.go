@@ -125,13 +125,13 @@ func (e *KubePiServer) setUpDB() {
 
 func (e *KubePiServer) setUpRootRoute() {
 	e.app.Any("/", func(ctx *context.Context) {
-		ctx.Redirect("/kubepi")
+		ctx.Redirect("/gvp")
 	})
 	c := swagger.Config{
-		URL: "/kubepi/swagger/doc.json",
+		URL: "/gvp/swagger/doc.json",
 	}
-	e.app.Get("/kubepi/swagger/{any:path}", swagger.CustomWrapHandler(&c, swaggerFiles.Handler))
-	e.rootRoute = e.app.Party("/kubepi")
+	e.app.Get("/gvp/swagger/{any:path}", swagger.CustomWrapHandler(&c, swaggerFiles.Handler))
+	e.rootRoute = e.app.Party("/gvp")
 }
 
 func (e *KubePiServer) setUpStaticFile() {
@@ -263,8 +263,8 @@ func (e *KubePiServer) setWebkubectlProxy() {
 		proxy.ModifyResponse = func(resp *http.Response) error {
 			if resp.StatusCode == iris.StatusMovedPermanently {
 				// 重定向重写
-				if resp.Header.Get("Location") == "/kubepi/webkubectl/" {
-					resp.Header.Set("Location", "/kubepi/webkubectl/root")
+				if resp.Header.Get("Location") == "/gvp/webkubectl/" {
+					resp.Header.Set("Location", "/gvp/webkubectl/root")
 				}
 			}
 			return nil

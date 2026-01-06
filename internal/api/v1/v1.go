@@ -131,8 +131,8 @@ func logHandler() iris.Handler {
 		}
 
 		currentPath := ctx.GetCurrentRoute().Path()
-		path := strings.Replace(ctx.Request().URL.Path, "/kubepi/api/v1/", "", 1)
-		currentPath = strings.Replace(currentPath, "/kubepi/api/v1/", "", 1)
+		path := strings.Replace(ctx.Request().URL.Path, "/gvp/api/v1/", "", 1)
+		currentPath = strings.Replace(currentPath, "/gvp/api/v1/", "", 1)
 		if strings.HasSuffix(path, "search") {
 			ctx.Next()
 			return
@@ -299,7 +299,7 @@ func apiResourceHandler(party iris.Party) iris.Handler {
 		routes := apiBuilder.GetRoutes()
 		resourceMap := map[string]*collectons.StringSet{}
 		for i := range routes {
-			if strings.HasPrefix(routes[i].Path, "/kubepi/api/v1/") {
+			if strings.HasPrefix(routes[i].Path, "/gvp/api/v1/") {
 				ss := strings.Split(routes[i].Path, "/")
 				if len(ss) >= 5 {
 					resourceName := ss[4]

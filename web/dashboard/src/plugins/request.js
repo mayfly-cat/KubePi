@@ -4,7 +4,7 @@ import store from "@/store"
 import i18n, {getLanguage} from "@/i18n"
 
 const instance = axios.create({
-    baseURL: "/kubepi", // url = base url + request url
+    baseURL: "/gvp", // url = base url + request url
     withCredentials: true,
     timeout: 60000 // request timeout, default 1 min
 })
@@ -69,7 +69,7 @@ const checkAuth = response => {
 const checkPermission = response => {
     // 请根据实际需求修改
     if (response.status === 403) {
-        location.href = "/kubepi/403"
+        location.href = "/gvp/403"
     }
 }
 

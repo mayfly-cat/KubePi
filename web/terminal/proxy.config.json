@@ -1,5 +1,5 @@
 {
-  "/kubepi/api/": {
+  "/gvp/api/": {
     "target": "http://localhost:2019"
   }
 }

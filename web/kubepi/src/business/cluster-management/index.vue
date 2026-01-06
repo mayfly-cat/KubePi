@@ -317,7 +317,8 @@ export default {
     onGotoDashboard(row) {
       if (row.accessable) {
         sessionStorage.removeItem("namespace")
-        const url = `${process.env.VUE_APP_DASHBOARD_URL_PREFIX}/dashboard?cluster=${row.name}`
+        // 仪表盘固定挂载在 /gvp/dashboard
+        const url = `/gvp/dashboard?cluster=${row.name}`
         window.open(url, "_blank")
       } else {
         this.$message.error(this.$t('business.cluster.user_not_in_cluster'))

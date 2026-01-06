@@ -213,7 +213,7 @@ const message = {
             sso_x509_key: "Certificate Key",
             sso_idp_metadata_url: "IDP Metadata URL",
             sso_test_result: "Test SSO connection successful",
-            sso_helper: "Note: If SSO is enabled, if you want to log in with a local account, please directly access \"http(s)://host/kubepi/login\"",
+            sso_helper: "Note: If SSO is enabled, if you want to log in with a local account, please directly access \"http(s)://host/gvp/login\"",
             sso_remake: "Reset",
             sso_test: "Test connection",
             test_result: "The connection is successful, matching {count} users",

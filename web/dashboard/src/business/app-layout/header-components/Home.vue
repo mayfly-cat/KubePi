@@ -13,7 +13,7 @@ export default {
   },
   methods: {
     toHome () {
-      window.open("/kubepi", '_self');
+      window.open("/gvp", '_self');
     }
   }
 }

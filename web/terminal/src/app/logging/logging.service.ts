@@ -19,7 +19,7 @@ export class LoggingService {
                        previous: boolean,
                        timestamps: boolean ): Observable<any> {
     const url = function () {
-      let baseUrl = `/kubepi/api/v1/clusters/${clusterName}/logging/session?podName=${podName}`
+      let baseUrl = `/gvp/api/v1/clusters/${clusterName}/logging/session?podName=${podName}`
       if (namespace) {
         baseUrl = `${baseUrl}&&namespace=${namespace}`
       }

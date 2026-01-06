@@ -4,7 +4,8 @@ function resolve(dir) {
     return path.join(__dirname, dir)
 }
 
-let publicPath = process.env.VUE_APP_PUBLIC_PATH
+// 仪表盘应用部署在 /gvp/dashboard 之下，固定 publicPath，避免依赖环境变量
+let publicPath = "/gvp/dashboard/"
 module.exports = {
     outputDir: path.resolve(__dirname, '../../cmd/server/web/dashboard'),
     productionSourceMap: true,
@@ -13,7 +14,7 @@ module.exports = {
         port: 4400,
         open: true,
         proxy: {
-            '/kubepi/api': {
+            '/gvp/api': {
                 target: 'http://0.0.0.0:80',
                 ws: true,
                 secure: false,

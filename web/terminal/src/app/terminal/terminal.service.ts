@@ -13,7 +13,7 @@ export class TerminalService {
 
   createTerminalSession(clusterName: string, namespace: string, podName: string, containerName: string, shell: string): Observable<any> {
     const url = function () {
-      let baseUrl = `/kubepi/api/v1/clusters/${clusterName}/terminal/session?podName=${podName}&&containerName=${containerName}&&shell=${shell}`
+      let baseUrl = `/gvp/api/v1/clusters/${clusterName}/terminal/session?podName=${podName}&&containerName=${containerName}&&shell=${shell}`
       if (namespace) {
         baseUrl = `${baseUrl}&&namespace=${namespace}`
       }
@@ -23,7 +23,7 @@ export class TerminalService {
   }
   createNodeShellTerminalSession(clusterName: string, nodeName: string): Observable<any> {
     const url = function () {
-      let baseUrl = `/kubepi/api/v1/clusters/${clusterName}/node_terminal/session?nodeName=${nodeName}`
+      let baseUrl = `/gvp/api/v1/clusters/${clusterName}/node_terminal/session?nodeName=${nodeName}`
       return baseUrl
     }()
     return this.http.get<any>(url)

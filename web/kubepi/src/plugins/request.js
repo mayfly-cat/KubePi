@@ -4,7 +4,7 @@ import { $error} from "./message"
 import {getLanguage} from "@/i18n"
 
 const instance = axios.create({
-    baseURL: "/kubepi", // url = base url + request url
+    baseURL: "/gvp", // url = base url + request url
     withCredentials: true,
     timeout: 60000 // request timeout, default 1 min
 })

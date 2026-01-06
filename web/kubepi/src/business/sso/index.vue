@@ -55,18 +55,18 @@ export default {
   methods: {
     redirectSso () {
       clearInterval(this.intervalId)
-      window.location.href = '/kubepi'+ssoLogin()
+      window.location.href = '/gvp'+ssoLogin()
       console.log("重定向完成")
       // 这里可以添加重定向逻辑，例如：
       //window.location.href = "https://www.google.com.hk/";
     },
     cancel () {
       clearInterval(this.intervalId)
-      window.location.href = '/kubepi/login'
+      window.location.href = '/gvp/login'
     },
     confirm () {
       clearInterval(this.intervalId)
-      window.location.href = '/kubepi'+ssoLogin()
+      window.location.href = '/gvp'+ssoLogin()
     },
     getAuthType() {
       getSso().then((res) => {

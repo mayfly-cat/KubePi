@@ -58,7 +58,8 @@ const createRouter = () => new Router({
     mode: 'history',
     scrollBehavior: () => ({y: 0}),
     routes: constantRoutes,
-    base: process.env.VUE_APP_PUBLIC_PATH
+    // 仪表盘挂载在 /gvp/dashboard，下方 base 必须与后端 static 前缀一致
+    base: "/gvp/dashboard"
 })
 
 const router = createRouter()
