@@ -5,6 +5,7 @@ const Charts = {
   sort: 7,
   component: Layout,
   name: "ChartManagement",
+  hidden: true,
   requirePermission: {
     apiGroup: "kubepi.org",
     resource: "appmarkets",

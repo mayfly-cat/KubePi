@@ -38,6 +38,22 @@ func (h *Handler) ListHistory() iris.Handler {
 		namespace := ctx.Params().GetString("namespace")
 		ingressName := ctx.Params().GetString("ingressName")
 
+		if clusterName == "" {
+			ctx.StatusCode(iris.StatusBadRequest)
+			ctx.Values().Set("message", "clusterName is required")
+			return
+		}
+		if namespace == "" {
+			ctx.StatusCode(iris.StatusBadRequest)
+			ctx.Values().Set("message", "namespace is required")
+			return
+		}
+		if ingressName == "" {
+			ctx.StatusCode(iris.StatusBadRequest)
+			ctx.Values().Set("message", "ingressName is required")
+			return
+		}
+
 		histories, err := h.ingressHistoryService.ListHistory(clusterName, namespace, ingressName, common.DBOptions{})
 		if err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)

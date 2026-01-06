@@ -266,7 +266,7 @@ export default {
       this.$router.push({
         name: "IngressDetail",
         params: { name: row.metadata.name, namespace: row.metadata.namespace },
-        query: { yamlShow: false },
+        query: { yamlShow: false, cluster: this.cluster },
       })
     },
     //改变选项"是否全文搜索"

@@ -390,6 +390,11 @@ func matchRoles(requestResource, requestMethod string, rs []v1Role.Role) (bool, 
 func resourceNameInvalidHandler() iris.Handler {
 	return func(ctx *context.Context) {
 		r := ctx.GetCurrentRoute()
+		// 跳过 ingresshistory 路由，因为它使用不同的参数名
+		if strings.Contains(r.Path(), "/ingresses/") && strings.Contains(r.Path(), "/history") {
+			ctx.Next()
+			return
+		}
 		if strings.Contains(r.Path(), "/:name") {
 			resourceName := ctx.Params().GetString("name")
 			if resourceName == "" {

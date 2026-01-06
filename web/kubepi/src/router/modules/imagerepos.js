@@ -5,6 +5,7 @@ const ImageRepos = {
   sort: 3,
   component: Layout,
   name: "ImageRepoManagement",
+  hidden: true,
   requirePermission: {
     resource: "imagerepos",
     verb: "list"
