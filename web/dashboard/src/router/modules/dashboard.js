@@ -16,6 +16,16 @@ const Dashboard = {
                 icon: "iconfont icongailan"
             },
         },
+        {
+            path: "/dashboard/route-matcher",
+            component: () => import("@/business/dashboard/route-matcher"),
+            name: "RouteMatcher",
+            hidden: true,
+            meta: {
+                title: "business.tools.route_matcher.title",
+                activeMenu: "/dashboard",
+            },
+        },
     ]
 }
 

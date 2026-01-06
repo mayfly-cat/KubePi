@@ -271,6 +271,37 @@ const message = {
           tracing: {
             title: "链路追踪",
             description: "追踪分布式系统的请求链路"
+          },
+          route_matcher: {
+            title: "路由匹配工具",
+            description: "模拟请求匹配Ingress路由规则",
+            config: "配置",
+            select_cluster: "请选择集群",
+            select_namespace: "请选择命名空间",
+            test_url: "测试URL",
+            url_placeholder: "请输入完整的URL，例如: http://example.com/api/v1/users",
+            match: "匹配",
+            match_results: "匹配结果",
+            matched_count: "匹配到 {count} 条规则",
+            no_match: "未找到匹配的路由规则",
+            all_rules: "所有路由规则",
+            total_count: "共 {count} 个Ingress",
+            ingress_name: "Ingress名称",
+            host: "主机",
+            path: "路径",
+            path_type: "路径类型",
+            service: "服务",
+            port: "端口",
+            match_type: "匹配类型",
+            exact_match: "精确匹配",
+            prefix_match: "前缀匹配",
+            load_cluster_failed: "加载集群列表失败",
+            load_namespace_failed: "加载命名空间列表失败",
+            load_ingress_failed: "加载Ingress列表失败",
+            input_url: "请输入测试URL",
+            invalid_url: "URL格式不正确",
+            no_match_found: "未找到匹配的路由规则",
+            match_success: "匹配成功，找到 {count} 条规则"
           }
         }
     },

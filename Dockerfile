@@ -41,44 +41,92 @@ WORKDIR /
 
 COPY --from=stage-bin-build /build/kubepi/bin/dist/usr /usr
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# 设置架构变量并安装基础工具
 RUN ARCH=$(uname -m) \
-    && case $ARCH in aarch64) ARCH="arm64";; x86_64) ARCH="amd64";; esac \
-    && echo "ARCH: " $ARCH \
+    && case $ARCH in \
+        aarch64) ARCH="arm64";; \
+        x86_64) ARCH="amd64";; \
+        *) echo "Unsupported architecture: $ARCH"; exit 1;; \
+    esac \
+    && echo "Detected ARCH: $ARCH" \
     && apk add --update --no-cache bash bash-completion curl wget openssl iputils busybox-extras vim tini \
     && sed -i "s/nobody:\//nobody:\/nonexistent/g" /etc/passwd \
-    && curl -sLf https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl/v1.22.1/${ARCH}/kubectl > /usr/bin/kubectl \
+    && curl -sLf https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl/v1.22.1/${ARCH}/kubectl -o /usr/bin/kubectl \
     && chmod +x /usr/bin/kubectl \
-    && cd /opt/ \
-    && wget https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl-aliases/kubectl-aliases.tar.gz \
+    && echo "kubectl installed successfully"
+
+# 安装 kubectl-aliases
+RUN cd /opt/ \
+    && wget -q --show-progress --progress=bar:force https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl-aliases/kubectl-aliases.tar.gz \
     && tar zxvf kubectl-aliases.tar.gz \
     && rm -rf kubectl-aliases.tar.gz \
     && chmod -R 755 kubectl-aliases \
-    && wget https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/fzf/0.21.0/fzf.tar.gz \
+    || (echo "Failed to install kubectl-aliases" && exit 1)
+
+# 安装 fzf
+RUN cd /opt/ \
+    && wget -q --show-progress --progress=bar:force https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/fzf/0.21.0/fzf.tar.gz \
     && tar zxvf fzf.tar.gz \
     && rm -rf fzf.tar.gz \
     && chmod -R 755 fzf \
-    && yes | fzf/install \
-    && ln -s fzf/bin/fzf /usr/local/bin/fzf \
+    && if [ -f fzf/install ]; then \
+        (cd fzf && ./install --bin || echo "fzf install script completed with warnings"); \
+    else \
+        echo "fzf install script not found, using binary directly"; \
+    fi \
+    && if [ -f fzf/bin/fzf ]; then \
+        ln -sf /opt/fzf/bin/fzf /usr/local/bin/fzf; \
+    else \
+        echo "fzf binary not found in expected location"; \
+        exit 1; \
+    fi
+
+# 安装 k9s
+RUN ARCH=$(uname -m) \
+    && case $ARCH in aarch64) ARCH="arm64";; x86_64) ARCH="amd64";; esac \
     && cd /tmp/ \
-    && wget https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/k9s/v0.24.14/k9s_Linux_${ARCH}.tar.gz \
+    && wget -q --show-progress --progress=bar:force https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/k9s/v0.24.14/k9s_Linux_${ARCH}.tar.gz \
     && tar -xvf k9s_Linux_${ARCH}.tar.gz \
     && chmod +x k9s \
     && mv k9s /usr/bin \
+    && echo "k9s installed successfully"
+
+# 安装 kubens
+RUN ARCH=$(uname -m) \
+    && case $ARCH in aarch64) ARCH="arm64";; x86_64) ARCH="amd64";; esac \
     && KUBECTX_VERSION=v0.9.4 \
-    && wget https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubens/${KUBECTX_VERSION}/kubens_${KUBECTX_VERSION}_linux_${ARCH}.tar.gz \
+    && cd /tmp/ \
+    && wget -q --show-progress --progress=bar:force https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubens/${KUBECTX_VERSION}/kubens_${KUBECTX_VERSION}_linux_${ARCH}.tar.gz \
     && tar -xvf kubens_${KUBECTX_VERSION}_linux_${ARCH}.tar.gz \
     && chmod +x kubens \
     && mv kubens /usr/bin \
-    && wget https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectx/${KUBECTX_VERSION}/kubectx_${KUBECTX_VERSION}_linux_${ARCH}.tar.gz \
+    && echo "kubens installed successfully"
+
+# 安装 kubectx
+RUN ARCH=$(uname -m) \
+    && case $ARCH in aarch64) ARCH="arm64";; x86_64) ARCH="amd64";; esac \
+    && KUBECTX_VERSION=v0.9.4 \
+    && cd /tmp/ \
+    && wget -q --show-progress --progress=bar:force https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectx/${KUBECTX_VERSION}/kubectx_${KUBECTX_VERSION}_linux_${ARCH}.tar.gz \
     && tar -xvf kubectx_${KUBECTX_VERSION}_linux_${ARCH}.tar.gz \
     && chmod +x kubectx \
     && mv kubectx /usr/bin \
+    && echo "kubectx installed successfully"
+
+# 安装 helm
+RUN ARCH=$(uname -m) \
+    && case $ARCH in aarch64) ARCH="arm64";; x86_64) ARCH="amd64";; esac \
     && HELM_VERSION=v3.10.2 \
-    && wget http://kubeoperator.oss-cn-beijing.aliyuncs.com/helm/${HELM_VERSION}/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz \
+    && cd /tmp/ \
+    && wget -q --show-progress --progress=bar:force http://kubeoperator.oss-cn-beijing.aliyuncs.com/helm/${HELM_VERSION}/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz \
     && tar -xvf helm-${HELM_VERSION}-linux-${ARCH}.tar.gz \
     && mv linux-${ARCH}/helm /usr/local/bin \
     && chmod +x /usr/local/bin/helm \
-    && chmod +x /usr/local/bin/gotty \
+    && echo "helm installed successfully"
+
+# 设置权限和清理
+RUN chmod +x /usr/local/bin/gotty \
     && chmod 555 /bin/busybox \
     && rm -rf /tmp/* /var/tmp/* /var/cache/apk/* \
     && chmod -R 755 /tmp \

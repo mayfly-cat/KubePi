@@ -75,6 +75,24 @@
           </el-row>
         </el-card>
       </el-col>
+      <!-- 路由匹配工具卡片 -->
+      <el-col :xs="8" :sm="8" :lg="6">
+        <el-card :body-style="{padding: '0px'}" @click.native="openRouteMatcher" class="d-card el-card tool-card">
+          <el-row :gutter="24">
+            <el-col :span="10">
+              <div style="text-align: center; padding: 10px;">
+                <i class="el-icon-connection" style="font-size: 40px; color: #3884c5;"></i>
+              </div>
+            </el-col>
+            <el-col :span="14">
+              <div class="card-content">
+                <span>{{ $t('business.tools.route_matcher.title') }}</span>
+                <h1 style="text-align: right"><a>工具</a></h1>
+              </div>
+            </el-col>
+          </el-row>
+        </el-card>
+      </el-col>
     </el-row>
     <el-row :gutter="24" v-has-permissions="{apiGroup:'',resource:'events',verb:'list'}">
       <h4 style="margin-left: 10px;float: left">{{$t('business.event.event')}}</h4>
@@ -184,6 +202,12 @@ export default {
     },
     jumpTo(val) {
       this.$router.push({name: val})
+    },
+    openRouteMatcher() {
+      this.$router.push({
+        name: "RouteMatcher",
+        query: { cluster: this.clusterName }
+      })
     },
     listResources() {
       getCluster(this.clusterName).then(res => {
@@ -480,5 +504,16 @@ export default {
 
 .card-content > span:first-child {
   color: #a1a9ae;
+}
+
+.tool-card {
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.tool-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 12px rgba(56, 132, 197, 0.3);
+  border-color: #3884c5;
 }
 </style>
