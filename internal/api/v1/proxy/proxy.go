@@ -41,17 +41,13 @@ func NewHandler() *Handler {
 	}
 }
 
-// saveIngressHistoryIfNeeded 如果是 Ingress 的 PUT 请求，保存历史版本
-func (h *Handler) saveIngressHistoryIfNeeded(ctx *context.Context, name string, proxyPath string, requestBody []byte, profile session.UserProfile) error {
-	// 检查是否是 Ingress 的 PUT 请求
-	if !strings.Contains(proxyPath, "ingresses") || ctx.Request().Method != http.MethodPut {
-		return nil
+// parseIngressInfo 解析 Ingress 路径信息
+func (h *Handler) parseIngressInfo(proxyPath string) (namespace, ingressName string, ok bool) {
+	if !strings.Contains(proxyPath, "ingresses") {
+		return "", "", false
 	}
 
-	// 解析路径获取 namespace 和 ingress name
-	// 路径格式: /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses/{name}
 	parts := strings.Split(proxyPath, "/")
-	var namespace, ingressName string
 	for i, part := range parts {
 		if part == "namespaces" && i+1 < len(parts) {
 			namespace = parts[i+1]
@@ -63,10 +59,38 @@ func (h *Handler) saveIngressHistoryIfNeeded(ctx *context.Context, name string, 
 	}
 
 	if namespace == "" || ingressName == "" {
-		return nil // 不是标准的 Ingress 路径，跳过
+		return "", "", false
 	}
 
-	// 获取当前的 Ingress 配置（在更新之前）
+	return namespace, ingressName, true
+}
+
+// saveIngressHistoryBeforeUpdate 在更新 Ingress 之前保存当前版本（仅当不存在历史记录时）
+func (h *Handler) saveIngressHistoryBeforeUpdate(ctx *context.Context, name string, proxyPath string, profile session.UserProfile) error {
+	// 检查是否是 Ingress 的 PUT 请求
+	if ctx.Request().Method != http.MethodPut {
+		return nil
+	}
+
+	namespace, ingressName, ok := h.parseIngressInfo(proxyPath)
+	if !ok {
+		return nil
+	}
+
+	// 检查是否已有历史版本
+	ingressHistoryService := ingresshistory.NewService()
+	latestVersion, err := ingressHistoryService.GetLatestVersion(name, namespace, ingressName, common.DBOptions{})
+	if err != nil {
+		// 查询失败，不保存历史
+		return nil
+	}
+
+	// 如果已有历史版本，不需要在更新前保存
+	if latestVersion > 0 {
+		return nil
+	}
+
+	// 如果没有历史版本，需要保存当前版本作为最原始的记录
 	c, err := h.clusterService.Get(name, common.DBOptions{})
 	if err != nil {
 		return fmt.Errorf("get cluster failed: %w", err)
@@ -96,7 +120,7 @@ func (h *Handler) saveIngressHistoryIfNeeded(ctx *context.Context, name string, 
 
 	getResp, err := httpClient.Do(getReq)
 	if err != nil {
-		// 如果获取失败（可能是新创建的），不保存历史
+		// 如果获取失败，不保存历史
 		return nil
 	}
 	defer getResp.Body.Close()
@@ -117,8 +141,7 @@ func (h *Handler) saveIngressHistoryIfNeeded(ctx *context.Context, name string, 
 		return fmt.Errorf("parse current ingress failed: %w", err)
 	}
 
-	// 保存历史版本
-	ingressHistoryService := ingresshistory.NewService()
+	// 保存历史版本（用于维护最原始的记录数据）
 	_, err = ingressHistoryService.SaveHistory(
 		name,
 		namespace,
@@ -131,7 +154,61 @@ func (h *Handler) saveIngressHistoryIfNeeded(ctx *context.Context, name string, 
 
 	if err != nil {
 		// 保存历史失败不应该阻止更新操作，只记录错误
-		// 这里可以选择记录日志
+		return nil
+	}
+
+	return nil
+}
+
+// saveIngressHistoryAfterOperation 在创建或更新 Ingress 之后保存新版本
+func (h *Handler) saveIngressHistoryAfterOperation(ctx *context.Context, name string, proxyPath string, responseBody []byte, statusCode int, profile session.UserProfile) error {
+	// 检查是否是 Ingress 的 POST 或 PUT 请求，且操作成功
+	if (ctx.Request().Method != http.MethodPost && ctx.Request().Method != http.MethodPut) || statusCode < 200 || statusCode >= 300 {
+		return nil
+	}
+
+	// 解析响应中的 Ingress 数据
+	var ingressData map[string]interface{}
+	if err := json.Unmarshal(responseBody, &ingressData); err != nil {
+		// 如果解析失败，不保存历史
+		return nil
+	}
+
+	// 从响应数据中获取 namespace 和 name
+	metadata, ok := ingressData["metadata"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	namespace, ok := metadata["namespace"].(string)
+	if !ok || namespace == "" {
+		return nil
+	}
+
+	ingressName, ok := metadata["name"].(string)
+	if !ok || ingressName == "" {
+		return nil
+	}
+
+	// 保存历史版本
+	ingressHistoryService := ingresshistory.NewService()
+	description := "Auto saved after create"
+	if ctx.Request().Method == http.MethodPut {
+		description = "Auto saved after update"
+	}
+
+	_, err := ingressHistoryService.SaveHistory(
+		name,
+		namespace,
+		ingressName,
+		ingressData,
+		profile.Name,
+		description,
+		common.DBOptions{},
+	)
+
+	if err != nil {
+		// 保存历史失败不应该影响操作结果，只记录错误
 		return nil
 	}
 
@@ -262,9 +339,9 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 			requestBody, _ = ctx.GetBody()
 		}
 
-		// 如果是 Ingress 的 PUT 请求，保存历史版本
+		// 如果是 Ingress 的 PUT 请求，在更新之前保存当前版本
 		if requestMethod == http.MethodPut {
-			_ = h.saveIngressHistoryIfNeeded(ctx, name, proxyPath, requestBody, profile)
+			_ = h.saveIngressHistoryBeforeUpdate(ctx, name, proxyPath, profile)
 		}
 
 		// 重新创建请求体（因为已经读取过了）
@@ -291,6 +368,11 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 		rawResp, _ := ioutil.ReadAll(resp.Body)
 		if resp.StatusCode == http.StatusForbidden {
 			resp.StatusCode = http.StatusInternalServerError
+		}
+
+		// 如果是 Ingress 的 POST 或 PUT 请求，在操作成功后保存新版本
+		if requestMethod == http.MethodPost || requestMethod == http.MethodPut {
+			_ = h.saveIngressHistoryAfterOperation(ctx, name, proxyPath, rawResp, resp.StatusCode, profile)
 		}
 		if req.Method == http.MethodGet && search {
 			var listObj K8sListObj

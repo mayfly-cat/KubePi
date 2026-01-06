@@ -5,7 +5,7 @@
         <span>{{ $t('business.tools.route_matcher.title') }}</span>
       </div>
       
-      <el-form :model="form" label-width="160px" :rules="rules" ref="form">
+      <el-form :model="form" label-width="220px" :rules="rules" ref="form">
         <el-form-item :label="$t('business.cluster.namespace')" prop="namespace">
           <el-select 
             v-model="form.namespace" 
@@ -52,9 +52,9 @@
         </el-tag>
       </div>
       
-      <el-table :data="matchResults" border stripe>
+      <el-table :data="matchResults" border class="route-table">
         <el-table-column :label="$t('business.tools.route_matcher.ingress_name')" prop="ingressName" width="200" />
-        <el-table-column :label="$t('business.cluster.namespace')" prop="namespace" width="150" />
+        <el-table-column :label="$t('business.cluster.namespace')" prop="namespace" width="200" />
         <el-table-column :label="$t('business.tools.route_matcher.host')" prop="host" width="200" />
         <el-table-column :label="$t('business.tools.route_matcher.path')" prop="path" width="200" />
         <el-table-column :label="$t('business.tools.route_matcher.path_type')" prop="pathType" width="120">
@@ -90,9 +90,9 @@
         </el-tag>
       </div>
       
-      <el-table :data="ingressList" border stripe>
+      <el-table :data="ingressList" border class="route-table">
         <el-table-column :label="$t('business.tools.route_matcher.ingress_name')" prop="metadata.name" width="200" show-overflow-tooltip />
-        <el-table-column :label="$t('business.cluster.namespace')" prop="metadata.namespace" width="150" />
+        <el-table-column :label="$t('business.cluster.namespace')" prop="metadata.namespace" width="200" />
         <el-table-column :label="$t('business.tools.route_matcher.rules')" min-width="300" show-overflow-tooltip>
           <template slot-scope="scope">
             <div v-for="(rule, ruleIndex) in scope.row.spec.rules" :key="ruleIndex" style="margin-bottom: 10px">
@@ -375,8 +375,47 @@ export default {
     border-color: #3e4145;
     color: #ffffff;
   }
+}
+
+.route-table {
+  ::v-deep .el-table {
+    background-color: #2a2d31;
+    color: #b6c0cd;
+  }
   
+  ::v-deep .el-table__header {
+    background-color: #1e1e1e;
+    
+    th {
+      background-color: #1e1e1e !important;
+      color: #ffffff;
+      border-color: #3e4145;
+    }
+  }
   
+  ::v-deep .el-table__body {
+    tr {
+      background-color: #2a2d31 !important;
+      
+      &:hover {
+        background-color: #32363a !important;
+      }
+      
+      td {
+        background-color: #2a2d31 !important;
+        border-color: #3e4145;
+        color: #b6c0cd;
+      }
+    }
+  }
+  
+  ::v-deep .el-table--striped .el-table__body tr.el-table__row--striped {
+    background-color: #2a2d31 !important;
+    
+    td {
+      background-color: #2a2d31 !important;
+    }
+  }
 }
 </style>
 

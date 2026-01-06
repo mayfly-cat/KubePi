@@ -80,8 +80,8 @@
         <el-card :body-style="{padding: '0px'}" @click.native="openRouteMatcher" class="d-card el-card tool-card">
           <el-row :gutter="24">
             <el-col :span="10">
-              <div style="text-align: center; padding: 10px;">
-                <i class="el-icon-connection" style="font-size: 40px; color: #3884c5;"></i>
+              <div class="tool-icon-container">
+                <i class="el-icon-connection"></i>
               </div>
             </el-col>
             <el-col :span="14">
@@ -515,5 +515,18 @@ export default {
   transform: translateY(-5px);
   box-shadow: 0 4px 12px rgba(56, 132, 197, 0.3);
   border-color: #3884c5;
+}
+
+.tool-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 90px;
+}
+
+.tool-icon-container i {
+  font-size: 40px;
+  color: #3884c5;
 }
 </style>
