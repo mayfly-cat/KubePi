@@ -129,7 +129,7 @@ const message = {
     login: {
       username: "Username",
       password: "Password",
-      title: "Log in to KubePi",
+      title: "Log in to Gateway Visual Panel",
       welcome: "Welcome back, please enter your username and password to log in",
       expires: "The authentication information has expired, please log in again",
       table: {
