@@ -23,7 +23,16 @@ func NewSsoClient(protocol, interfaceAddress, clientId, clientSecret string, ena
 	}
 }
 
-func (s *Sso) TestConnect(interfaceAddress string) error {
+func (s *Sso) TestConnect(protocol, interfaceAddress string) error {
+	//根据协议设置请求URL
+	switch protocol {
+	case "openid":
+		interfaceAddress += "/.well-known/openid-configuration"
+	case "saml2":
+		interfaceAddress += "/sso/saml2/metadata"
+	default:
+		return errors.New("不支持的协议类型: " + protocol)
+	}
 	req, err := http.NewRequest("GET", interfaceAddress, nil)
 	if err != nil {
 		return err

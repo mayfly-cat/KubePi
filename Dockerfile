@@ -51,25 +51,56 @@ RUN ARCH=$(uname -m) \
     esac \
     && echo "Detected ARCH: $ARCH" \
     && apk add --update --no-cache bash bash-completion curl wget openssl iputils busybox-extras vim tini ca-certificates \
-    && sed -i "s/nobody:\//nobody:\/nonexistent/g" /etc/passwd \
-    && KUBECTL_URL="https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl/v1.22.1/${ARCH}/kubectl" \
-    && echo "Downloading kubectl from: $KUBECTL_URL" \
-    && for i in 1 2 3; do \
-        if curl -sLf --connect-timeout 10 --max-time 30 "$KUBECTL_URL" -o /usr/bin/kubectl; then \
-            echo "kubectl downloaded successfully (attempt $i)"; \
-            break; \
-        else \
-            echo "kubectl download failed (attempt $i), exit code: $?"; \
-            if [ $i -eq 3 ]; then \
-                echo "ERROR: Failed to download kubectl after 3 attempts"; \
-                echo "Trying alternative method with wget..."; \
-                wget --timeout=30 --tries=3 "$KUBECTL_URL" -O /usr/bin/kubectl || exit 1; \
-            fi; \
-            sleep 2; \
+    && update-ca-certificates \
+    && sed -i "s/nobody:\//nobody:\/nonexistent/g" /etc/passwd
+
+# 下载 kubectl（使用独立的 RUN 命令以避免复杂的嵌套逻辑）
+RUN ARCH=$(uname -m) \
+    && case $ARCH in \
+        aarch64) ARCH="arm64";; \
+        x86_64) ARCH="amd64";; \
+        *) ARCH="amd64";; \
+    esac \
+    && KUBECTL_VERSION="v1.22.1" \
+    && PRIMARY_URL="https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl/${KUBECTL_VERSION}/${ARCH}/kubectl" \
+    && FALLBACK_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
+    && echo "Attempting to download kubectl (ARCH: ${ARCH}, VERSION: ${KUBECTL_VERSION})" \
+    && DOWNLOADED=false \
+    && echo "Trying primary URL with curl..." \
+    && (curl -sLf --connect-timeout 15 --max-time 90 "$PRIMARY_URL" -o /usr/bin/kubectl \
+        || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$PRIMARY_URL" -o /usr/bin/kubectl) \
+        || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$PRIMARY_URL" -o /usr/bin/kubectl)) \
+    && if [ -f /usr/bin/kubectl ] && [ -s /usr/bin/kubectl ]; then \
+        DOWNLOADED=true; \
+        echo "kubectl downloaded successfully from primary URL (curl)"; \
+    fi \
+    && if [ "$DOWNLOADED" != "true" ]; then \
+        echo "curl failed, trying wget for primary URL (with --no-check-certificate)..." \
+        && wget --no-check-certificate --timeout=30 --tries=2 "$PRIMARY_URL" -O /usr/bin/kubectl 2>&1 \
+        && if [ -f /usr/bin/kubectl ] && [ -s /usr/bin/kubectl ]; then \
+            DOWNLOADED=true; \
+            echo "kubectl downloaded successfully from primary URL (wget)"; \
         fi; \
-    done \
+    fi \
+    && if [ "$DOWNLOADED" != "true" ]; then \
+        echo "Primary URL failed, trying fallback URL: $FALLBACK_URL" \
+        && (curl -sLf --connect-timeout 15 --max-time 90 "$FALLBACK_URL" -o /usr/bin/kubectl \
+            || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$FALLBACK_URL" -o /usr/bin/kubectl) \
+            || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$FALLBACK_URL" -o /usr/bin/kubectl)) \
+        && if [ -f /usr/bin/kubectl ] && [ -s /usr/bin/kubectl ]; then \
+            DOWNLOADED=true; \
+            echo "kubectl downloaded successfully from fallback URL"; \
+        fi; \
+    fi \
+    && if [ "$DOWNLOADED" != "true" ]; then \
+        echo "ERROR: Failed to download kubectl from all sources"; \
+        echo "Primary URL: $PRIMARY_URL"; \
+        echo "Fallback URL: $FALLBACK_URL"; \
+        exit 1; \
+    fi \
     && chmod +x /usr/bin/kubectl \
-    && /usr/bin/kubectl version --client --short || echo "Warning: kubectl version check failed" \
+    && echo "Verifying kubectl installation..." \
+    && /usr/bin/kubectl version --client --short \
     && echo "kubectl installed successfully"
 
 # 安装 kubectl-aliases

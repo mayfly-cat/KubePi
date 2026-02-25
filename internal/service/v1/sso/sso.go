@@ -66,12 +66,12 @@ func (s *service) TestConnect(sso *v1Sso.Sso) error {
 	switch sso.Protocol {
 	case "openid":
 		sc := ssoClient.NewSsoClient(sso.Protocol, sso.InterfaceAddress, sso.ClientId, sso.ClientSecret, sso.Enable)
-		if err := sc.TestConnect(sso.InterfaceAddress); err != nil {
+		if err := sc.TestConnect(sso.Protocol, sso.InterfaceAddress); err != nil {
 			return err
 		}
 	case "saml2":
 		sc := ssoClient.NewSsoClient(sso.Protocol, sso.IdpMetadataURL, sso.ClientId, sso.ClientSecret, sso.Enable)
-		if err := sc.TestConnect(sso.IdpMetadataURL); err != nil {
+		if err := sc.TestConnect(sso.Protocol, sso.IdpMetadataURL); err != nil {
 			return err
 		}
 	default:
@@ -83,7 +83,7 @@ func (s *service) TestConnect(sso *v1Sso.Sso) error {
 func (s *service) Create(sso *v1Sso.Sso, options common.DBOptions) error {
 	sc := ssoClient.NewSsoClient(sso.Protocol, sso.InterfaceAddress, sso.ClientId, sso.ClientSecret, sso.Enable)
 	// 当用户进行SSO配置时，应该为用户检测目标是否可连接
-	if err := sc.TestConnect(sso.InterfaceAddress); err != nil {
+	if err := sc.TestConnect(sso.Protocol, sso.InterfaceAddress); err != nil {
 		return err
 	}
 
@@ -97,7 +97,7 @@ func (s *service) Create(sso *v1Sso.Sso, options common.DBOptions) error {
 func (s *service) Update(id string, sso *v1Sso.Sso, options common.DBOptions) error {
 	sc := ssoClient.NewSsoClient(sso.Protocol, sso.InterfaceAddress, sso.ClientId, sso.ClientSecret, sso.Enable)
 	// 当用户进行SSO配置时，应该为用户检测目标是否可连接
-	if err := sc.TestConnect(sso.InterfaceAddress); err != nil {
+	if err := sc.TestConnect(sso.Protocol, sso.InterfaceAddress); err != nil {
 		return err
 	}
 

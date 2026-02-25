@@ -2,7 +2,7 @@
     <div class="sso-background">
       <div class="sso-container">
         <el-row type="flex" v-loading="loading">
-          <el-col :span="12">
+          <el-col :span="24">
             <el-form size="default">
               <div class="sso-title">
                 {{ systemName }}
@@ -19,9 +19,6 @@
                 </el-button>
               </div>
             </el-form>
-          </el-col>
-          <el-col :span="12">
-            <div class="sso-image"></div>
           </el-col>
         </el-row>
       </div>
@@ -108,47 +105,45 @@ export default {
     align-items: center;
   }
   .sso-background {
-    background-color: #FFFFFF;
+    background-color: #F5F7FA;
     height: 100%;
     @include sso-center;
   }
   .sso-container {
-    min-width: 640px;
-    width: 960px;
-    height: 280px;
+    min-width: 420px;
+    width: 520px;
+    padding: 32px 40px 28px;
     background-color: #FFFFFF;
     box-shadow: 0 5px 5px -3px rgba(0, 0, 0, .2), 0 8px 10px 1px rgba(0, 0, 0, .14), 0 3px 14px 2px rgba(0, 0, 0, .12);
     @media only screen and (max-width: 1280px) {
-      width: 900px;
-      height: 380px;
+      width: 420px;
+      min-width: 320px;
     }
     .sso-title {
-      margin-top: 20px;
-      margin-left: 30px;
+      margin-top: 4px;
       font-size: 32px;
       letter-spacing: 0;
-      text-align: left;
-      color: #000000;
+      text-align: center;
+      color: #303133;
       @media only screen and (max-width: 1280px) {
-        margin-top: 20px;
+        margin-top: 4px;
       }
     }
     .sso-tips {
-      margin-top: 60px;
-      margin-left: 30px;
-      font-size: 22px;
+      margin-top: 24px;
+      font-size: 18px;
       letter-spacing: 0;
-      text-align: left;
-      color: #000000;
+      text-align: center;
+      color: #606266;
       @media only screen and (max-width: 1280px) {
-        margin-top: 20px;
+        margin-top: 16px;
       }
     }
     .sso-btn {
-      margin-top: 60px;
-      padding: 0 30px;
+      margin-top: 32px;
+      text-align: center;
       @media only screen and (max-width: 1280px) {
-        margin-top: 20px;
+        margin-top: 24px;
       }
     }
     .sso-image {
@@ -165,7 +160,7 @@ export default {
       border-radius: 0;
     }
     .spacing-button + .spacing-button {
-      margin-left: 200px;
+      margin-left: 16px;
       background-color: transparent;
       color: black;
     }
