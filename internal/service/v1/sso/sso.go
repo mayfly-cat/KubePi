@@ -4,9 +4,15 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
 	v1Session "github.com/KubeOperator/kubepi/internal/api/v1/session"
 	v1 "github.com/KubeOperator/kubepi/internal/model/v1"
 	v1Role "github.com/KubeOperator/kubepi/internal/model/v1/role"
@@ -23,9 +29,6 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
-	"net/http"
-	"net/url"
-	"time"
 )
 
 type Service interface {
@@ -164,13 +167,32 @@ func (s *service) OpenID(openid *v1Sso.OpenID, options common.DBOptions) (v1Sess
 	if err != nil {
 		return v1Session.UserProfile{}, errors.New("获取用户信息失败: " + err.Error())
 	}
+	//使用map接收 用户信息
+	userInfoMap := make(map[string]interface{})
+	if err = userInfo.Claims(&userInfoMap); err != nil {
+		return v1Session.UserProfile{}, err
+	}
+	fmt.Println("userInfoMap", userInfoMap)
+
 	// 获取用户名
 	var claims struct {
 		PreferredUsername string `json:"preferred_username"`
+		Username          string `json:"username"`
+		Name              string `json:"name"`
+		Email             string `json:"email"`
 	}
+	userInfoJson, _ := json.Marshal(userInfo)
+	//username为邮箱@前缀
+	claims.Username = userInfoMap["email"].(string)[0:strings.Index(userInfoMap["email"].(string), "@")]
+
+	fmt.Println("userInfoJson", string(userInfoJson))
+
 	if err = userInfo.Claims(&claims); err != nil {
 		return v1Session.UserProfile{}, err
 	}
+
+	fmt.Println("ckaims", claims)
+	fmt.Println("claims", claims.Name, claims.PreferredUsername, claims.Username)
 
 	// 初始化用户
 	_, err = s.userService.GetByNameOrEmail(userInfo.Email, options)
@@ -183,9 +205,9 @@ func (s *service) OpenID(openid *v1Sso.OpenID, options common.DBOptions) (v1Sess
 					Kind:       "User",
 				},
 				Metadata: v1.Metadata{
-					Name: claims.PreferredUsername,
+					Name: claims.Username,
 				},
-				NickName: claims.PreferredUsername,
+				NickName: claims.Name,
 				Email:    userInfo.Email,
 				Language: openid.Language,
 				IsAdmin:  false,
@@ -214,11 +236,11 @@ func (s *service) OpenID(openid *v1Sso.OpenID, options common.DBOptions) (v1Sess
 					CreatedBy:  "admin",
 				},
 				Metadata: v1.Metadata{
-					Name: fmt.Sprintf("role-binding-%s-%s", "ReadOnly", claims.PreferredUsername),
+					Name: fmt.Sprintf("role-binding-%s-%s", "ReadOnly", claims.Username),
 				},
 				Subject: v1Role.Subject{
 					Kind: "User",
-					Name: claims.PreferredUsername,
+					Name: claims.Username,
 				},
 				RoleRef: "ReadOnly",
 			}
@@ -227,14 +249,14 @@ func (s *service) OpenID(openid *v1Sso.OpenID, options common.DBOptions) (v1Sess
 				return v1Session.UserProfile{}, err
 			}
 			_ = tx.Commit()
-			fmt.Println("SSO用户" + claims.PreferredUsername + "不存在，已自动创建本地账号")
+			fmt.Println("SSO用户" + claims.Username + "不存在，已自动创建本地账号")
 		} else {
-			return v1Session.UserProfile{}, fmt.Errorf("query user %s failed ,: %s", claims.PreferredUsername, err.Error())
+			return v1Session.UserProfile{}, fmt.Errorf("query user %s failed ,: %s", claims.Username, err.Error())
 		}
 	}
 
 	// 设置profile
-	return s.localProfile(claims.PreferredUsername, userInfo.Email)
+	return s.localProfile(claims.Username, userInfo.Email)
 }
 
 func (s *service) OpenIDConfig(clientId, clientSecret, issuerURL, redirectURL string) (*v1Sso.OpenID, error) {
