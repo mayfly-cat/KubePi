@@ -45,6 +45,29 @@ func (h *Handler) OperationLogsSearch() iris.Handler {
 	}
 }
 
+func (h *Handler) AuditLogsSearch() iris.Handler {
+	return func(ctx *context.Context) {
+		pageNum, _ := ctx.Values().GetInt(pkgV1.PageNum)
+		pageSize, _ := ctx.Values().GetInt(pkgV1.PageSize)
+
+		var conditions commons.SearchConditions
+		if err := ctx.ReadJSON(&conditions); err != nil {
+			ctx.StatusCode(iris.StatusBadRequest)
+			ctx.Values().Set("message", err.Error())
+			return
+		}
+		items, total, err := h.systemService.SearchAuditLogs(pageNum, pageSize, conditions.Conditions, common.DBOptions{})
+		if err != nil {
+			if !errors.Is(err, storm.ErrNotFound) {
+				ctx.StatusCode(iris.StatusInternalServerError)
+				ctx.Values().Set("message", err.Error())
+				return
+			}
+		}
+		ctx.Values().Set("data", pkgV1.Page{Items: items, Total: total})
+	}
+}
+
 func (h *Handler) LoginLogsSearch() iris.Handler {
 	return func(ctx *context.Context) {
 		pageNum, _ := ctx.Values().GetInt(pkgV1.PageNum)
@@ -73,4 +96,5 @@ func Install(parent iris.Party) {
 	sp := parent.Party("/systems")
 	sp.Post("/login/logs/search", handler.LoginLogsSearch())
 	sp.Post("/operation/logs/search", handler.OperationLogsSearch())
+	sp.Post("/audit/logs/search", handler.AuditLogsSearch())
 }

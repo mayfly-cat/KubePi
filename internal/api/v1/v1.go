@@ -2,11 +2,10 @@ package v1
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/KubeOperator/kubepi/internal/api/v1/sso"
-	"io/ioutil"
+	"io"
 	"strings"
 
 	"github.com/KubeOperator/kubepi/internal/api/v1/mfa"
@@ -27,7 +26,6 @@ import (
 	"github.com/KubeOperator/kubepi/internal/api/v1/user"
 	"github.com/KubeOperator/kubepi/internal/api/v1/webkubectl"
 	"github.com/KubeOperator/kubepi/internal/api/v1/ws"
-	v1 "github.com/KubeOperator/kubepi/internal/model/v1"
 	v1Role "github.com/KubeOperator/kubepi/internal/model/v1/role"
 	v1System "github.com/KubeOperator/kubepi/internal/model/v1/system"
 	"github.com/KubeOperator/kubepi/internal/service/v1/common"
@@ -35,6 +33,7 @@ import (
 	v1RoleBindingService "github.com/KubeOperator/kubepi/internal/service/v1/rolebinding"
 	v1SystemService "github.com/KubeOperator/kubepi/internal/service/v1/system"
 	pkgV1 "github.com/KubeOperator/kubepi/pkg/api/v1"
+	"github.com/KubeOperator/kubepi/pkg/audit"
 	"github.com/KubeOperator/kubepi/pkg/collectons"
 	"github.com/KubeOperator/kubepi/pkg/i18n"
 	"github.com/asdine/storm/v3"
@@ -111,11 +110,6 @@ func pageHandler() iris.Handler {
 	}
 }
 
-type logHelper struct {
-	Name     string `json:"name"`
-	Metadata v1.Metadata
-}
-
 func logHandler() iris.Handler {
 	return func(ctx *context.Context) {
 		method := strings.ToLower(ctx.Method())
@@ -130,9 +124,9 @@ func logHandler() iris.Handler {
 			return
 		}
 
-		currentPath := ctx.GetCurrentRoute().Path()
+		routePath := ctx.GetCurrentRoute().Path()
 		path := strings.Replace(ctx.Request().URL.Path, "/gvp/api/v1/", "", 1)
-		currentPath = strings.Replace(currentPath, "/gvp/api/v1/", "", 1)
+		currentPath := strings.Replace(routePath, "/gvp/api/v1/", "", 1)
 		if strings.HasSuffix(path, "search") {
 			ctx.Next()
 			return
@@ -140,76 +134,55 @@ func logHandler() iris.Handler {
 
 		u := ctx.Values().Get("profile")
 		profile := u.(session.UserProfile)
-		var log v1System.OperationLog
-		log.Operator = profile.Name
-		log.Operation = method
 
-		//handle ldap operate
-		if strings.Contains(path, "ldap") {
-			if strings.Contains(path, "import") {
-				log.Operation = "import"
-			}
-			if strings.Contains(path, "sync") {
-				log.Operation = "sync"
-			}
-			if strings.Contains(path, "connect") {
-				log.Operation = "testConnect"
-			}
-			if strings.Contains(path, "login") {
-				log.Operation = "testLogin"
+		skipBodyName := strings.Contains(currentPath, "upload")
+		var body []byte
+		if !skipBodyName && method == "post" {
+			data, err := ctx.GetBody()
+			if err == nil {
+				body = data
+				ctx.Request().Body = nopCloserBytes(data)
 			}
 		}
 
-		pathResource := strings.Split(path, "/")
-		if strings.HasPrefix(currentPath, "clusters/:name") {
-			if len(pathResource) < 3 {
-				log.OperationDomain = pathResource[0]
-				if method != "post" {
-					log.SpecificInformation = pathResource[1]
-				}
-			} else {
-				log.OperationDomain = fmt.Sprintf("%s_%s", pathResource[0], pathResource[2])
-				if method != "post" {
-					if len(pathResource) > 3 {
-						log.SpecificInformation = fmt.Sprintf("[%s] %s", pathResource[1], pathResource[3])
-					} else {
-						log.SpecificInformation = fmt.Sprintf("[%s] %s", pathResource[1], "-")
-					}
-				}
-			}
-		} else {
-			log.OperationDomain = strings.Split(currentPath, "/")[0]
-			if method != "post" {
-				if len(pathResource) > 1 {
-					log.SpecificInformation = pathResource[1]
-				} else {
-					log.SpecificInformation = "-"
-				}
-			}
+		draft, ok := audit.BuildWriteLogDraft(method, path, currentPath, body, skipBodyName)
+		if !ok {
+			ctx.Next()
+			return
 		}
 
-		if !strings.Contains(currentPath, "upload") {
-			if method == "post" {
-				var req logHelper
-				data, _ := ctx.GetBody()
-				if err := json.Unmarshal(data, &req); err != nil {
-					ctx.Next()
-				}
-				if len(req.Name) == 0 {
-					req.Name = req.Metadata.Name
-				}
-				if strings.HasPrefix(currentPath, "clusters/:name") {
-					log.SpecificInformation = fmt.Sprintf("[%s] %s", pathResource[1], req.Name)
-				} else {
-					log.SpecificInformation = req.Name
-				}
-				ctx.Request().Body = ioutil.NopCloser(bytes.NewBuffer(data))
-			}
+		ctx.Next()
+
+		status := ctx.GetStatusCode()
+		success := status >= 200 && status < 400
+
+		opLog := v1System.OperationLog{
+			Operator:            profile.Name,
+			Operation:           draft.Operation,
+			OperationDomain:     draft.OperationDomain,
+			SpecificInformation: draft.SpecificInformation,
+		}
+		auditLog := v1System.AuditLog{
+			Operator:            profile.Name,
+			HttpMethod:          method,
+			RequestPath:         ctx.Request().URL.Path,
+			Resource:            resourceName,
+			Operation:           draft.Operation,
+			OperationDomain:     draft.OperationDomain,
+			SpecificInformation: draft.SpecificInformation,
+			ClientIp:            ctx.RemoteAddr(),
+			UserAgent:           ctx.GetHeader("User-Agent"),
+			StatusCode:          status,
+			Success:             success,
 		}
 		systemService := v1SystemService.NewService()
-		go systemService.CreateOperationLog(&log, common.DBOptions{})
-		ctx.Next()
+		go systemService.CreateOperationLog(&opLog, common.DBOptions{})
+		go systemService.CreateAuditLog(&auditLog, common.DBOptions{})
 	}
+}
+
+func nopCloserBytes(b []byte) io.ReadCloser {
+	return io.NopCloser(bytes.NewReader(b))
 }
 
 func resourceExtractHandler() iris.Handler {

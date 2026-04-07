@@ -11,3 +11,8 @@ export function searchOperationLogs(pageNum, pageSize, conditions) {
     let url = `${baseUrl}/operation/logs/search?pageNum=${pageNum}&&pageSize=${pageSize}`
     return post(url, {conditions: conditions})
 }
+
+export function searchAuditLogs(pageNum, pageSize, conditions) {
+    let url = `${baseUrl}/audit/logs/search?pageNum=${pageNum}&&pageSize=${pageSize}`
+    return post(url, {conditions: conditions})
+}

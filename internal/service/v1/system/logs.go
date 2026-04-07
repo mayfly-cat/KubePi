@@ -15,8 +15,10 @@ import (
 type Service interface {
 	common.DBService
 	CreateOperationLog(log *v1System.OperationLog, options common.DBOptions)
+	CreateAuditLog(log *v1System.AuditLog, options common.DBOptions)
 	CreateLoginLog(log *v1System.LoginLog, options common.DBOptions)
 	SearchOperationLogs(num, size int, conditions common.Conditions, options common.DBOptions) ([]v1System.OperationLog, int, error)
+	SearchAuditLogs(num, size int, conditions common.Conditions, options common.DBOptions) ([]v1System.AuditLog, int, error)
 	SearchLoginLogs(num, size int, conditions common.Conditions, options common.DBOptions) ([]v1System.LoginLog, int, error)
 }
 
@@ -35,6 +37,16 @@ func (u *service) CreateOperationLog(log *v1System.OperationLog, options common.
 	log.UpdateAt = time.Now()
 	if err := db.Save(log); err != nil {
 		fmt.Printf("operation log %s by user %s write failure, error is %s", log.Operation, log.Operator, err.Error())
+	}
+}
+
+func (u *service) CreateAuditLog(log *v1System.AuditLog, options common.DBOptions) {
+	db := u.GetDB(options)
+	log.UUID = uuid.New().String()
+	log.CreateAt = time.Now()
+	log.UpdateAt = time.Now()
+	if err := db.Save(log); err != nil {
+		fmt.Printf("audit log %s %s by user %s write failure, error is %s", log.HttpMethod, log.RequestPath, log.Operator, err.Error())
 	}
 }
 
@@ -57,7 +69,7 @@ func (s *service) SearchOperationLogs(num, size int, conditions common.Condition
 			ms = append(ms, q.Or(
 				costomStorm.Like("Operator", conditions[k].Value),
 				costomStorm.Like("Operation", conditions[k].Value),
-				costomStorm.Like("Detail", conditions[k].Value),
+				costomStorm.Like("SpecificInformation", conditions[k].Value),
 			))
 		} else {
 			field := lang.FirstToUpper(conditions[k].Field)
@@ -84,6 +96,53 @@ func (s *service) SearchOperationLogs(num, size int, conditions common.Condition
 		query.Limit(size).Skip((num - 1) * size)
 	}
 	logs := make([]v1System.OperationLog, 0)
+	if err := query.Find(&logs); err != nil {
+		return nil, 0, err
+	}
+	return logs, count, nil
+}
+
+func (s *service) SearchAuditLogs(num, size int, conditions common.Conditions, options common.DBOptions) ([]v1System.AuditLog, int, error) {
+	db := s.GetDB(options)
+
+	var ms []q.Matcher
+	for k := range conditions {
+		if conditions[k].Field == "quick" {
+			ms = append(ms, q.Or(
+				costomStorm.Like("Operator", conditions[k].Value),
+				costomStorm.Like("HttpMethod", conditions[k].Value),
+				costomStorm.Like("RequestPath", conditions[k].Value),
+				costomStorm.Like("Resource", conditions[k].Value),
+				costomStorm.Like("Operation", conditions[k].Value),
+				costomStorm.Like("OperationDomain", conditions[k].Value),
+				costomStorm.Like("SpecificInformation", conditions[k].Value),
+				costomStorm.Like("ClientIp", conditions[k].Value),
+			))
+		} else {
+			field := lang.FirstToUpper(conditions[k].Field)
+			value := conditions[k].Value
+
+			switch conditions[k].Operator {
+			case "eq":
+				ms = append(ms, q.Eq(field, value))
+			case "ne":
+				ms = append(ms, q.Not(q.Eq(field, value)))
+			case "like":
+				ms = append(ms, costomStorm.Like(field, value))
+			case "not like":
+				ms = append(ms, q.Not(costomStorm.Like(field, value)))
+			}
+		}
+	}
+	query := db.Select(ms...).OrderBy("CreateAt").Reverse()
+	count, err := query.Count(&v1System.AuditLog{})
+	if err != nil {
+		return nil, 0, err
+	}
+	if size != 0 {
+		query.Limit(size).Skip((num - 1) * size)
+	}
+	logs := make([]v1System.AuditLog, 0)
 	if err := query.Find(&logs); err != nil {
 		return nil, 0, err
 	}

@@ -32,6 +32,15 @@ const SystemLog = {
         activeMenu: "/operationlogs",
       },
     },
+    {
+      path: "/auditlogs",
+      component: () => import("@/business/system-log/audit/index"),
+      name: "AuditLog",
+      meta: {
+        title: "business.system.audit_log",
+        activeMenu: "/auditlogs",
+      },
+    },
   ],
 }
 
