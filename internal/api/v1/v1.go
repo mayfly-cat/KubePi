@@ -36,6 +36,7 @@ import (
 	"github.com/KubeOperator/kubepi/pkg/audit"
 	"github.com/KubeOperator/kubepi/pkg/collectons"
 	"github.com/KubeOperator/kubepi/pkg/i18n"
+	"github.com/KubeOperator/kubepi/pkg/util/requestip"
 	"github.com/asdine/storm/v3"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
@@ -179,7 +180,7 @@ func logHandler() iris.Handler {
 			Operation:           draft.Operation,
 			OperationDomain:     draft.OperationDomain,
 			SpecificInformation: draft.SpecificInformation,
-			ClientIp:            ctx.RemoteAddr(),
+			ClientIp:            requestip.FromRequest(ctx.Request()),
 			UserAgent:           ctx.GetHeader("User-Agent"),
 			StatusCode:          status,
 			Success:             success,

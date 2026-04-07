@@ -240,6 +240,8 @@ const message = {
             http_method: "HTTP method",
             request_path: "Request path",
             resource: "API resource",
+            rule_adds: "Added rules",
+            rule_removes: "Removed rules",
             status_code: "Status",
             audit_result: "Result",
             result_ok: "Success",

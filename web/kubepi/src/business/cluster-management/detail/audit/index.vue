@@ -10,6 +10,16 @@
         </template>
       </el-table-column>
       <el-table-column :label="$t('business.system.specific_information')" prop="specificInformation" min-width="140" show-overflow-tooltip />
+      <el-table-column :label="$t('business.system.rule_adds')" min-width="260" show-overflow-tooltip>
+        <template v-slot:default="{row}">
+          {{ formatRules(row.ruleAdds) }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="$t('business.system.rule_removes')" min-width="260" show-overflow-tooltip>
+        <template v-slot:default="{row}">
+          {{ formatRules(row.ruleRemoves) }}
+        </template>
+      </el-table-column>
       <el-table-column :label="$t('business.system.client_ip')" prop="clientIp" fix />
       <el-table-column :label="$t('business.system.status_code')" prop="statusCode" width="90" fix />
       <el-table-column :label="$t('business.system.audit_result')" prop="success" width="90" fix>
@@ -76,6 +86,12 @@ export default {
   methods: {
     translate(a) {
       return this.$t(a)
+    },
+    formatRules(rules) {
+      if (!rules || rules.length === 0) {
+        return "-"
+      }
+      return rules.join("; ")
     },
     search(conditions) {
       this.loading = true

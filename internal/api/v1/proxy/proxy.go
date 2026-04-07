@@ -25,6 +25,7 @@ import (
 	v1SystemService "github.com/KubeOperator/kubepi/internal/service/v1/system"
 	pkgV1 "github.com/KubeOperator/kubepi/pkg/api/v1"
 	"github.com/KubeOperator/kubepi/pkg/kubernetes"
+	"github.com/KubeOperator/kubepi/pkg/util/requestip"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -336,10 +337,15 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 			apiUrl.Path = addUrlNamespace(apiUrl.Path, namespace)
 		}
 
-		// 对于 PUT 请求，需要先读取请求体（可能用于保存历史）
+		// 对于写请求，需要先读取请求体（可能用于保存历史和审计摘要）
 		var requestBody []byte
 		if requestMethod == http.MethodPut || requestMethod == http.MethodPost || requestMethod == http.MethodPatch {
 			requestBody, _ = ctx.GetBody()
+		}
+		target := parseK8sTarget(proxyPath)
+		beforeRaw := []byte(nil)
+		if target.resource == "ingresses" {
+			beforeRaw = fetchResourceForAudit(&httpClient, *apiUrl, requestMethod)
 		}
 
 		// 如果是 Ingress 的 PUT 请求，在更新之前保存当前版本
@@ -378,26 +384,33 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 			_ = h.saveIngressHistoryAfterOperation(ctx, name, proxyPath, rawResp, resp.StatusCode, profile)
 		}
 		if shouldAuditProxyMethod(requestMethod) {
-			t := parseK8sTarget(proxyPath)
 			domain := "k8s"
-			if t.resource != "" {
-				domain = fmt.Sprintf("k8s_%s", t.resource)
+			if target.resource != "" {
+				domain = fmt.Sprintf("k8s_%s", target.resource)
 			}
-			if t.subresource != "" {
-				domain = fmt.Sprintf("%s_%s", domain, t.subresource)
+			if target.subresource != "" {
+				domain = fmt.Sprintf("%s_%s", domain, target.subresource)
 			}
 			statusCode := resp.StatusCode
 			success := statusCode >= 200 && statusCode < 400
+			specificInformation := buildSpecificInformation(name, target, requestMethod, requestBody)
+			var ruleAdds []string
+			var ruleRemoves []string
+			if target.resource == "ingresses" {
+				specificInformation, ruleAdds, ruleRemoves = buildIngressRuleSummary(specificInformation, requestMethod, beforeRaw, rawResp)
+			}
 			auditLog := v1System.AuditLog{
 				Operator:            profile.Name,
 				Cluster:             name,
 				HttpMethod:          strings.ToLower(requestMethod),
 				RequestPath:         ctx.Request().URL.Path,
-				Resource:            t.resource,
+				Resource:            target.resource,
 				Operation:           strings.ToLower(requestMethod),
 				OperationDomain:     domain,
-				SpecificInformation: buildSpecificInformation(name, t, requestMethod, requestBody),
-				ClientIp:            ctx.RemoteAddr(),
+				SpecificInformation: specificInformation,
+				RuleAdds:            ruleAdds,
+				RuleRemoves:         ruleRemoves,
+				ClientIp:            requestip.FromRequest(ctx.Request()),
 				UserAgent:           ctx.GetHeader("User-Agent"),
 				StatusCode:          statusCode,
 				Success:             success,
@@ -770,6 +783,136 @@ func buildSpecificInformation(cluster string, t k8sTarget, method string, reques
 		return fmt.Sprintf("[%s/%s] %s", cluster, t.namespace, name)
 	}
 	return fmt.Sprintf("[%s] %s", cluster, name)
+}
+
+func fetchResourceForAudit(client *http.Client, requestURL url.URL, method string) []byte {
+	if method != http.MethodPut && method != http.MethodPatch && method != http.MethodDelete {
+		return nil
+	}
+	req, err := http.NewRequest(http.MethodGet, requestURL.String(), nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := client.Do(req)
+	if err != nil || resp == nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil
+	}
+	raw, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func extractIngressRuleKeys(raw []byte) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil
+	}
+	spec, ok := obj["spec"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	rules, ok := spec["rules"].([]interface{})
+	if !ok {
+		return nil
+	}
+	keys := make([]string, 0)
+	for i := range rules {
+		rule, ok := rules[i].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		host, _ := rule["host"].(string)
+		httpCfg, ok := rule["http"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		paths, ok := httpCfg["paths"].([]interface{})
+		if !ok {
+			continue
+		}
+		for j := range paths {
+			pathMap, ok := paths[j].(map[string]interface{})
+			if !ok {
+				continue
+			}
+			path, _ := pathMap["path"].(string)
+			backendText := "-"
+			if backend, ok := pathMap["backend"].(map[string]interface{}); ok {
+				if service, ok := backend["service"].(map[string]interface{}); ok {
+					svcName, _ := service["name"].(string)
+					portText := ""
+					if port, ok := service["port"].(map[string]interface{}); ok {
+						if n, ok := port["number"]; ok {
+							portText = fmt.Sprintf("%v", n)
+						} else if n, ok := port["name"].(string); ok {
+							portText = n
+						}
+					}
+					backendText = svcName
+					if portText != "" {
+						backendText = fmt.Sprintf("%s:%s", svcName, portText)
+					}
+				}
+			}
+			keys = append(keys, fmt.Sprintf("%s %s -> %s", host, path, backendText))
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func diffIngressRules(before, after []byte) (adds, removes []string) {
+	beforeRules := extractIngressRuleKeys(before)
+	afterRules := extractIngressRuleKeys(after)
+	beforeSet := map[string]struct{}{}
+	afterSet := map[string]struct{}{}
+	for i := range beforeRules {
+		beforeSet[beforeRules[i]] = struct{}{}
+	}
+	for i := range afterRules {
+		afterSet[afterRules[i]] = struct{}{}
+	}
+	for i := range afterRules {
+		if _, ok := beforeSet[afterRules[i]]; !ok {
+			adds = append(adds, afterRules[i])
+		}
+	}
+	for i := range beforeRules {
+		if _, ok := afterSet[beforeRules[i]]; !ok {
+			removes = append(removes, beforeRules[i])
+		}
+	}
+	return adds, removes
+}
+
+func buildIngressRuleSummary(baseInfo, method string, before, after []byte) (string, []string, []string) {
+	adds, removes := diffIngressRules(before, after)
+	if method == http.MethodDelete && len(removes) == 0 {
+		removes = extractIngressRuleKeys(before)
+	}
+	if method == http.MethodPost && len(adds) == 0 {
+		adds = extractIngressRuleKeys(after)
+	}
+	if len(adds) == 0 && len(removes) == 0 {
+		return baseInfo, nil, nil
+	}
+	parts := make([]string, 0, 2)
+	if len(adds) > 0 {
+		parts = append(parts, fmt.Sprintf("add: %s", strings.Join(adds, "; ")))
+	}
+	if len(removes) > 0 {
+		parts = append(parts, fmt.Sprintf("remove: %s", strings.Join(removes, "; ")))
+	}
+	return fmt.Sprintf("%s | %s", baseInfo, strings.Join(parts, " | ")), adds, removes
 }
 
 func parseResourceName(path string) (string, error) {

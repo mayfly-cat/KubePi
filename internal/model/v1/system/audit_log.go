@@ -6,16 +6,18 @@ import v1 "github.com/KubeOperator/kubepi/internal/model/v1"
 type AuditLog struct {
 	v1.BaseModel        `storm:"inline"`
 	v1.Metadata         `storm:"inline"`
-	Operator            string `json:"operator"`
-	Cluster             string `json:"cluster"`
-	HttpMethod          string `json:"httpMethod"`
-	RequestPath         string `json:"requestPath"`
-	Resource            string `json:"resource"`
-	Operation           string `json:"operation"`
-	OperationDomain     string `json:"operationDomain"`
-	SpecificInformation string `json:"specificInformation"`
-	ClientIp            string `json:"clientIp"`
-	UserAgent           string `json:"userAgent"`
-	StatusCode          int    `json:"statusCode"`
-	Success             bool   `json:"success"`
+	Operator            string   `json:"operator"`
+	Cluster             string   `json:"cluster"`
+	HttpMethod          string   `json:"httpMethod"`
+	RequestPath         string   `json:"requestPath"`
+	Resource            string   `json:"resource"`
+	Operation           string   `json:"operation"`
+	OperationDomain     string   `json:"operationDomain"`
+	SpecificInformation string   `json:"specificInformation"`
+	RuleAdds            []string `json:"ruleAdds"`
+	RuleRemoves         []string `json:"ruleRemoves"`
+	ClientIp            string   `json:"clientIp"`
+	UserAgent           string   `json:"userAgent"`
+	StatusCode          int      `json:"statusCode"`
+	Success             bool     `json:"success"`
 }

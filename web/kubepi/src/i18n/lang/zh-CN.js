@@ -240,6 +240,8 @@ const message = {
             http_method: "HTTP 方法",
             request_path: "请求路径",
             resource: "API 资源",
+            rule_adds: "新增规则",
+            rule_removes: "删除规则",
             status_code: "状态码",
             audit_result: "结果",
             result_ok: "成功",
