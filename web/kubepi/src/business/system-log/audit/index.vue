@@ -85,8 +85,8 @@ export default {
             component: "FuComplexSelect",
             defaultOperator: "eq",
             options: [
-              { label: this.$t("business.system.result_ok"), value: true },
-              { label: this.$t("business.system.result_fail"), value: false },
+              { label: this.$t("business.system.result_ok"), value: "true" },
+              { label: this.$t("business.system.result_fail"), value: "false" },
             ],
           },
         ],
