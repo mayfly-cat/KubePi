@@ -105,6 +105,17 @@ const Clusters = {
                       activeMenu: "/clusters",
                     },
                 }
+                ,
+                {
+                    path: "auditlogs",
+                    props: true,
+                    component: () => import("@/business/cluster-management/detail/audit"),
+                    hidden: true,
+                    name: "ClusterAuditLogs",
+                    meta: {
+                      activeMenu: "/clusters",
+                    },
+                }
             ]
         }
     ]

@@ -135,6 +135,14 @@ func logHandler() iris.Handler {
 		u := ctx.Values().Get("profile")
 		profile := u.(session.UserProfile)
 
+		pathResource := strings.Split(path, "/")
+		clusterName := ""
+		if strings.HasPrefix(currentPath, "clusters/:name") {
+			if len(pathResource) > 1 {
+				clusterName = pathResource[1]
+			}
+		}
+
 		skipBodyName := strings.Contains(currentPath, "upload")
 		var body []byte
 		if !skipBodyName && method == "post" {
@@ -164,6 +172,7 @@ func logHandler() iris.Handler {
 		}
 		auditLog := v1System.AuditLog{
 			Operator:            profile.Name,
+			Cluster:             clusterName,
 			HttpMethod:          method,
 			RequestPath:         ctx.Request().URL.Path,
 			Resource:            resourceName,
@@ -214,7 +223,7 @@ func roleHandler() iris.Handler {
 			Name: u.Name,
 		}, common.DBOptions{})
 		if err != nil {
-			if !errors.As(err, &storm.ErrNotFound) {
+			if !errors.Is(err, storm.ErrNotFound) {
 				ctx.StatusCode(iris.StatusInternalServerError)
 				ctx.Values().Set("message", err.Error())
 				return

@@ -2,6 +2,7 @@
   <layout-content :header="$t('business.system.audit_log')">
     <div v-loading="loading">
       <complex-table :search-config="searchConfig" :data="data" :pagination-config="paginationConfig" @search="search">
+        <el-table-column :label="$t('business.cluster.cluster')" prop="cluster" fix />
         <el-table-column :label="$t('business.system.operator')" prop="operator" fix />
         <el-table-column :label="$t('business.system.http_method')" prop="httpMethod" fix />
         <el-table-column :label="$t('business.system.request_path')" prop="requestPath" min-width="200" show-overflow-tooltip />
@@ -54,6 +55,12 @@ export default {
       searchConfig: {
         quickPlaceholder: this.$t("commons.search.quickSearch"),
         components: [
+          {
+            field: "cluster",
+            label: this.$t("business.cluster.cluster"),
+            component: "FuComplexInput",
+            defaultOperator: "eq",
+          },
           {
             field: "operator",
             label: this.$t("business.system.operator"),

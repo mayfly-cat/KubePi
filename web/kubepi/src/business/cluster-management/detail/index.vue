@@ -4,6 +4,7 @@
       <el-menu-item :index="membersPath">{{ $t('business.cluster.member') }}</el-menu-item>
       <el-menu-item :index="rolesPath">{{ $t('business.cluster.role') }}</el-menu-item>
       <el-menu-item :index="reposPath">{{ $t('business.cluster.repo') }}</el-menu-item>
+      <el-menu-item :index="auditLogsPath">{{ $t('business.cluster.audit_log') }}</el-menu-item>
     </el-menu>
     <br/>
     <div class="detailClass">
@@ -25,6 +26,7 @@ export default {
       membersPath: `/clusters/detail/${this.name}/members`,
       rolesPath: `/clusters/detail/${this.name}/roles`,
       reposPath: `/clusters/detail/${this.name}/repos`,
+      auditLogsPath: `/clusters/detail/${this.name}/auditlogs`,
     }
   },
   methods: {

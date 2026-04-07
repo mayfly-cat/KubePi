@@ -17,10 +17,12 @@ import (
 
 	"github.com/KubeOperator/kubepi/internal/api/v1/session"
 	v1Cluster "github.com/KubeOperator/kubepi/internal/model/v1/cluster"
+	v1System "github.com/KubeOperator/kubepi/internal/model/v1/system"
 	"github.com/KubeOperator/kubepi/internal/service/v1/cluster"
 	"github.com/KubeOperator/kubepi/internal/service/v1/clusterbinding"
 	"github.com/KubeOperator/kubepi/internal/service/v1/common"
 	ingresshistory "github.com/KubeOperator/kubepi/internal/service/v1/ingresshistory"
+	v1SystemService "github.com/KubeOperator/kubepi/internal/service/v1/system"
 	pkgV1 "github.com/KubeOperator/kubepi/pkg/api/v1"
 	"github.com/KubeOperator/kubepi/pkg/kubernetes"
 	"github.com/kataras/iris/v12"
@@ -162,6 +164,7 @@ func (h *Handler) saveIngressHistoryBeforeUpdate(ctx *context.Context, name stri
 
 // saveIngressHistoryAfterOperation 在创建或更新 Ingress 之后保存新版本
 func (h *Handler) saveIngressHistoryAfterOperation(ctx *context.Context, name string, proxyPath string, responseBody []byte, statusCode int, profile session.UserProfile) error {
+	_ = proxyPath
 	// 检查是否是 Ingress 的 POST 或 PUT 请求，且操作成功
 	if (ctx.Request().Method != http.MethodPost && ctx.Request().Method != http.MethodPut) || statusCode < 200 || statusCode >= 300 {
 		return nil
@@ -281,7 +284,7 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 		if strings.Contains(proxyPath, "namespaces") {
 			namespaced = false
 		}
-		canVisitAll := false
+		var canVisitAll bool
 		if profile.IsAdministrator {
 			canVisitAll = true
 		} else {
@@ -373,6 +376,34 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 		// 如果是 Ingress 的 POST 或 PUT 请求，在操作成功后保存新版本
 		if requestMethod == http.MethodPost || requestMethod == http.MethodPut {
 			_ = h.saveIngressHistoryAfterOperation(ctx, name, proxyPath, rawResp, resp.StatusCode, profile)
+		}
+		if shouldAuditProxyMethod(requestMethod) {
+			t := parseK8sTarget(proxyPath)
+			domain := "k8s"
+			if t.resource != "" {
+				domain = fmt.Sprintf("k8s_%s", t.resource)
+			}
+			if t.subresource != "" {
+				domain = fmt.Sprintf("%s_%s", domain, t.subresource)
+			}
+			statusCode := resp.StatusCode
+			success := statusCode >= 200 && statusCode < 400
+			auditLog := v1System.AuditLog{
+				Operator:            profile.Name,
+				Cluster:             name,
+				HttpMethod:          strings.ToLower(requestMethod),
+				RequestPath:         ctx.Request().URL.Path,
+				Resource:            t.resource,
+				Operation:           strings.ToLower(requestMethod),
+				OperationDomain:     domain,
+				SpecificInformation: buildSpecificInformation(name, t, requestMethod, requestBody),
+				ClientIp:            ctx.RemoteAddr(),
+				UserAgent:           ctx.GetHeader("User-Agent"),
+				StatusCode:          statusCode,
+				Success:             success,
+			}
+			systemService := v1SystemService.NewService()
+			go systemService.CreateAuditLog(&auditLog, common.DBOptions{})
 		}
 		if req.Method == http.MethodGet && search {
 			var listObj K8sListObj
@@ -552,7 +583,7 @@ func fieldFilter(data []interface{}, fms ...fieldMatcher) []interface{} {
 
 func pageFilter(num, size int, data []interface{}) (int, []interface{}, error) {
 	total := len(data)
-	result := make([]interface{}, 0)
+	var result []interface{}
 	if num*size < len(data) {
 		result = data[(num-1)*size : (num * size)]
 	} else {
@@ -646,6 +677,99 @@ func ensureProxyPathValid(path string) string {
 		path = "/" + path
 	}
 	return path
+}
+
+type k8sTarget struct {
+	resource    string
+	subresource string
+	namespace   string
+	name        string
+}
+
+func parseK8sTarget(proxyPath string) k8sTarget {
+	ss := strings.Split(proxyPath, "/")
+	parts := make([]string, 0, len(ss))
+	for i := range ss {
+		if ss[i] != "" {
+			parts = append(parts, ss[i])
+		}
+	}
+	t := k8sTarget{}
+	if len(parts) == 0 {
+		return t
+	}
+
+	for i := 0; i < len(parts); i++ {
+		if parts[i] == "namespaces" && i+2 < len(parts) {
+			t.namespace = parts[i+1]
+			t.resource = parts[i+2]
+			if i+3 < len(parts) {
+				t.name = parts[i+3]
+			}
+			if i+4 < len(parts) {
+				t.subresource = parts[i+4]
+			}
+			return t
+		}
+	}
+
+	if len(parts) >= 2 {
+		t.resource = parts[len(parts)-2]
+		t.name = parts[len(parts)-1]
+	} else {
+		t.resource = parts[len(parts)-1]
+	}
+	return t
+}
+
+func extractK8sObjectNameFromBody(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return ""
+	}
+	if v, ok := obj["metadata"]; ok {
+		if m, ok := v.(map[string]interface{}); ok {
+			if n, ok := m["name"]; ok {
+				if ns, ok := n.(string); ok {
+					return ns
+				}
+			}
+		}
+	}
+	if n, ok := obj["name"]; ok {
+		if ns, ok := n.(string); ok {
+			return ns
+		}
+	}
+	return ""
+}
+
+func shouldAuditProxyMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func buildSpecificInformation(cluster string, t k8sTarget, method string, requestBody []byte) string {
+	name := t.name
+	if method == http.MethodPost {
+		if bn := extractK8sObjectNameFromBody(requestBody); bn != "" {
+			name = bn
+		}
+	}
+	if name == "" {
+		return "-"
+	}
+	if t.namespace != "" {
+		return fmt.Sprintf("[%s/%s] %s", cluster, t.namespace, name)
+	}
+	return fmt.Sprintf("[%s] %s", cluster, name)
 }
 
 func parseResourceName(path string) (string, error) {

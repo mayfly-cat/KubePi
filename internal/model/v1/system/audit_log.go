@@ -7,6 +7,7 @@ type AuditLog struct {
 	v1.BaseModel        `storm:"inline"`
 	v1.Metadata         `storm:"inline"`
 	Operator            string `json:"operator"`
+	Cluster             string `json:"cluster"`
 	HttpMethod          string `json:"httpMethod"`
 	RequestPath         string `json:"requestPath"`
 	Resource            string `json:"resource"`

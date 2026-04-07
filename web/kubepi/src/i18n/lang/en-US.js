@@ -143,6 +143,7 @@ const message = {
             cluster_version: "version",
             member: "Member",
             role: "Role",
+            audit_log: "Audit Logs",
             administrator: "administrator",
             viewer: "viewer",
             custom: "custom",

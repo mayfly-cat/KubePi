@@ -143,6 +143,7 @@ const message = {
             cluster_version: "版本",
             member: "成员",
             role: "角色",
+            audit_log: "审计日志",
             administrator: "管理员",
             viewer: "只读者",
             custom: "自定义",

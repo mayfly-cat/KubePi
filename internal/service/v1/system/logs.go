@@ -109,6 +109,7 @@ func (s *service) SearchAuditLogs(num, size int, conditions common.Conditions, o
 	for k := range conditions {
 		if conditions[k].Field == "quick" {
 			ms = append(ms, q.Or(
+				costomStorm.Like("Cluster", conditions[k].Value),
 				costomStorm.Like("Operator", conditions[k].Value),
 				costomStorm.Like("HttpMethod", conditions[k].Value),
 				costomStorm.Like("RequestPath", conditions[k].Value),
