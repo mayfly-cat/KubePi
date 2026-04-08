@@ -396,8 +396,11 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 			specificInformation := buildSpecificInformation(name, target, requestMethod, requestBody)
 			var ruleAdds []string
 			var ruleRemoves []string
+			operationRecord := ""
 			if target.resource == "ingresses" {
-				specificInformation, ruleAdds, ruleRemoves = buildIngressRuleSummary(specificInformation, requestMethod, beforeRaw, rawResp)
+				ingressOK := isSuccessfulIngressWrite(statusCode, requestMethod, rawResp)
+				specificInformation, ruleAdds, ruleRemoves, operationRecord = buildIngressRuleSummary(
+					specificInformation, requestMethod, beforeRaw, rawResp, ingressOK, statusCode)
 			}
 			auditLog := v1System.AuditLog{
 				Operator:            profile.Name,
@@ -408,6 +411,7 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 				Operation:           strings.ToLower(requestMethod),
 				OperationDomain:     domain,
 				SpecificInformation: specificInformation,
+				OperationRecord:     operationRecord,
 				RuleAdds:            ruleAdds,
 				RuleRemoves:         ruleRemoves,
 				ClientIp:            requestip.FromRequest(ctx.Request()),
@@ -870,6 +874,42 @@ func extractIngressRuleKeys(raw []byte) []string {
 	return keys
 }
 
+func isSuccessfulIngressWrite(statusCode int, method string, body []byte) bool {
+	if statusCode < 200 || statusCode >= 300 {
+		return false
+	}
+	if method == http.MethodDelete {
+		return true
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return true
+	}
+	var t struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(body, &t); err != nil {
+		return false
+	}
+	// 失败时 API 返回 Status 对象，不能当作 Ingress 做规则 diff
+	return t.Kind == "Ingress"
+}
+
+func formatIngressOperationRecord(adds, removes []string) string {
+	var b strings.Builder
+	if len(adds) > 0 {
+		b.WriteString("新增: ")
+		b.WriteString(strings.Join(adds, "；"))
+	}
+	if len(removes) > 0 {
+		if b.Len() > 0 {
+			b.WriteString(" | ")
+		}
+		b.WriteString("删除: ")
+		b.WriteString(strings.Join(removes, "；"))
+	}
+	return b.String()
+}
+
 func diffIngressRules(before, after []byte) (adds, removes []string) {
 	beforeRules := extractIngressRuleKeys(before)
 	afterRules := extractIngressRuleKeys(after)
@@ -894,7 +934,11 @@ func diffIngressRules(before, after []byte) (adds, removes []string) {
 	return adds, removes
 }
 
-func buildIngressRuleSummary(baseInfo, method string, before, after []byte) (string, []string, []string) {
+// buildIngressRuleSummary 仅在 API 成功且响应体为 Ingress 时计算规则差异，避免将错误响应误当作「删除规则」。
+func buildIngressRuleSummary(baseInfo, method string, before, after []byte, ingressOK bool, httpStatus int) (string, []string, []string, string) {
+	if !ingressOK {
+		return baseInfo, nil, nil, fmt.Sprintf("请求未成功（HTTP %d），未应用 Ingress 变更", httpStatus)
+	}
 	adds, removes := diffIngressRules(before, after)
 	if method == http.MethodDelete && len(removes) == 0 {
 		removes = extractIngressRuleKeys(before)
@@ -902,17 +946,11 @@ func buildIngressRuleSummary(baseInfo, method string, before, after []byte) (str
 	if method == http.MethodPost && len(adds) == 0 {
 		adds = extractIngressRuleKeys(after)
 	}
-	if len(adds) == 0 && len(removes) == 0 {
-		return baseInfo, nil, nil
+	opRecord := formatIngressOperationRecord(adds, removes)
+	if opRecord == "" {
+		opRecord = "路由规则无增删（可能仅更新了注解等其他字段）"
 	}
-	parts := make([]string, 0, 2)
-	if len(adds) > 0 {
-		parts = append(parts, fmt.Sprintf("add: %s", strings.Join(adds, "; ")))
-	}
-	if len(removes) > 0 {
-		parts = append(parts, fmt.Sprintf("remove: %s", strings.Join(removes, "; ")))
-	}
-	return fmt.Sprintf("%s | %s", baseInfo, strings.Join(parts, " | ")), adds, removes
+	return baseInfo, adds, removes, opRecord
 }
 
 func parseResourceName(path string) (string, error) {

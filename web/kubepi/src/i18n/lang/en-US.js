@@ -240,8 +240,11 @@ const message = {
             http_method: "HTTP method",
             request_path: "Request path",
             resource: "API resource",
+            operation_record: "Operation record",
             rule_adds: "Added rules",
             rule_removes: "Removed rules",
+            rule_adds_short: "Added: ",
+            rule_removes_short: "Removed: ",
             status_code: "Status",
             audit_result: "Result",
             result_ok: "Success",
@@ -356,6 +359,8 @@ const system_logs = {
     clusters_repos: "Cluster Repos",
     imagerepos: "Image Registries",
     ldap: "LDAP",
+    export_file: "Export file",
+    export_folder: "Export folder",
 }
 
 

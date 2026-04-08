@@ -121,17 +121,22 @@ func (s *service) SearchAuditLogs(num, size int, conditions common.Conditions, o
 				costomStorm.Like("Operation", conditions[k].Value),
 				costomStorm.Like("OperationDomain", conditions[k].Value),
 				costomStorm.Like("SpecificInformation", conditions[k].Value),
+				costomStorm.Like("OperationRecord", conditions[k].Value),
 				costomStorm.Like("ClientIp", conditions[k].Value),
 			))
 		} else {
 			field := lang.FirstToUpper(conditions[k].Field)
 			value := conditions[k].Value
+			cmpValue := interface{}(value)
+			if field == "Success" {
+				cmpValue = lang.ParseValueType(value)
+			}
 
 			switch conditions[k].Operator {
 			case "eq":
-				ms = append(ms, q.Eq(field, value))
+				ms = append(ms, q.Eq(field, cmpValue))
 			case "ne":
-				ms = append(ms, q.Not(q.Eq(field, value)))
+				ms = append(ms, q.Not(q.Eq(field, cmpValue)))
 			case "like":
 				ms = append(ms, costomStorm.Like(field, value))
 			case "not like":

@@ -18,14 +18,9 @@
           </template>
         </el-table-column>
         <el-table-column :label="$t('business.system.specific_information')" prop="specificInformation" min-width="120" show-overflow-tooltip />
-        <el-table-column :label="$t('business.system.rule_adds')" min-width="240" show-overflow-tooltip>
+        <el-table-column :label="$t('business.system.operation_record')" prop="operationRecord" min-width="280" show-overflow-tooltip>
           <template v-slot:default="{row}">
-            {{ formatRules(row.ruleAdds) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('business.system.rule_removes')" min-width="240" show-overflow-tooltip>
-          <template v-slot:default="{row}">
-            {{ formatRules(row.ruleRemoves) }}
+            {{ displayOperationRecord(row) }}
           </template>
         </el-table-column>
         <el-table-column :label="$t('business.system.client_ip')" prop="clientIp" fix />
@@ -108,11 +103,18 @@ export default {
     translate(a) {
       return this.$t(a)
     },
-    formatRules(rules) {
-      if (!rules || rules.length === 0) {
-        return "-"
+    displayOperationRecord(row) {
+      if (row.operationRecord) {
+        return row.operationRecord
       }
-      return rules.join("; ")
+      const parts = []
+      if (row.ruleAdds && row.ruleAdds.length) {
+        parts.push(`${this.$t("business.system.rule_adds_short")}${row.ruleAdds.join("；")}`)
+      }
+      if (row.ruleRemoves && row.ruleRemoves.length) {
+        parts.push(`${this.$t("business.system.rule_removes_short")}${row.ruleRemoves.join("；")}`)
+      }
+      return parts.length ? parts.join(" | ") : "-"
     },
     search(conditions) {
       this.loading = true

@@ -240,8 +240,11 @@ const message = {
             http_method: "HTTP 方法",
             request_path: "请求路径",
             resource: "API 资源",
+            operation_record: "操作记录",
             rule_adds: "新增规则",
             rule_removes: "删除规则",
+            rule_adds_short: "新增：",
+            rule_removes_short: "删除：",
             status_code: "状态码",
             audit_result: "结果",
             result_ok: "成功",
@@ -353,6 +356,8 @@ const system_logs = {
     import: "导入",
     testConnect: "测试",
     testLogin: "测试",
+    export_file: "导出文件",
+    export_folder: "导出目录",
 }
 
 
