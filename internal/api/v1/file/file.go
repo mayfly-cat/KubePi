@@ -10,13 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/KubeOperator/kubepi/internal/api/v1/session"
 	fileModel "github.com/KubeOperator/kubepi/internal/model/v1/file"
-	v1System "github.com/KubeOperator/kubepi/internal/model/v1/system"
-	"github.com/KubeOperator/kubepi/internal/service/v1/common"
 	"github.com/KubeOperator/kubepi/internal/service/v1/file"
-	v1SystemService "github.com/KubeOperator/kubepi/internal/service/v1/system"
-	"github.com/KubeOperator/kubepi/pkg/util/requestip"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 )
@@ -172,7 +167,6 @@ func (h *Handler) DownloadFolder() iris.Handler {
 		if err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", err.Error())
-			savePodExportAuditLog(ctx, "folder", req, iris.StatusInternalServerError, false, err.Error())
 			return
 		}
 		filename := path.Base(file)
@@ -180,11 +174,9 @@ func (h *Handler) DownloadFolder() iris.Handler {
 		if err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", err.Error())
-			savePodExportAuditLog(ctx, "folder", req, iris.StatusInternalServerError, false, err.Error())
 			return
 		}
 		os.RemoveAll(file)
-		savePodExportAuditLog(ctx, "folder", req, iris.StatusOK, true, "")
 	}
 }
 func (h *Handler) DownloadFile() iris.Handler {
@@ -201,7 +193,6 @@ func (h *Handler) DownloadFile() iris.Handler {
 		if err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", err.Error())
-			savePodExportAuditLog(ctx, "file", req, iris.StatusInternalServerError, false, err.Error())
 			return
 		}
 		filename := path.Base(file)
@@ -209,50 +200,10 @@ func (h *Handler) DownloadFile() iris.Handler {
 		if err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", err.Error())
-			savePodExportAuditLog(ctx, "file", req, iris.StatusInternalServerError, false, err.Error())
 			return
 		}
 		os.RemoveAll(file)
-		savePodExportAuditLog(ctx, "file", req, iris.StatusOK, true, "")
 	}
-}
-
-func savePodExportAuditLog(ctx *context.Context, exportKind string, req fileModel.Request, statusCode int, success bool, errMsg string) {
-	p := ctx.Values().Get("profile")
-	profile, ok := p.(session.UserProfile)
-	if !ok || profile.Name == "" {
-		return
-	}
-	op := "export_file"
-	if exportKind == "folder" {
-		op = "export_folder"
-	}
-	record := fmt.Sprintf("数据导出(%s)：cluster=%s namespace=%s pod=%s container=%s path=%s",
-		exportKind, req.Cluster, req.Namespace, req.PodName, req.ContainerName, req.Path)
-	if !success && errMsg != "" {
-		msg := errMsg
-		if len(msg) > 280 {
-			msg = msg[:280] + "…"
-		}
-		record = record + "；失败: " + msg
-	}
-	logItem := v1System.AuditLog{
-		Operator:            profile.Name,
-		Cluster:             req.Cluster,
-		HttpMethod:          "get",
-		RequestPath:         ctx.Request().URL.Path,
-		Resource:            "pod",
-		Operation:           op,
-		OperationDomain:     "pod_files",
-		SpecificInformation: fmt.Sprintf("[%s/%s] %s", req.Cluster, req.Namespace, req.PodName),
-		OperationRecord:     record,
-		ClientIp:            requestip.FromRequest(ctx.Request()),
-		UserAgent:           ctx.GetHeader("User-Agent"),
-		StatusCode:          statusCode,
-		Success:             success,
-	}
-	svc := v1SystemService.NewService()
-	go svc.CreateAuditLog(&logItem, common.DBOptions{})
 }
 
 func (h *Handler) UploadFile() iris.Handler {

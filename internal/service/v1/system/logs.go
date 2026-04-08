@@ -115,9 +115,6 @@ func (s *service) SearchAuditLogs(num, size int, conditions common.Conditions, o
 			ms = append(ms, q.Or(
 				costomStorm.Like("Cluster", conditions[k].Value),
 				costomStorm.Like("Operator", conditions[k].Value),
-				costomStorm.Like("HttpMethod", conditions[k].Value),
-				costomStorm.Like("RequestPath", conditions[k].Value),
-				costomStorm.Like("Resource", conditions[k].Value),
 				costomStorm.Like("Operation", conditions[k].Value),
 				costomStorm.Like("OperationDomain", conditions[k].Value),
 				costomStorm.Like("SpecificInformation", conditions[k].Value),

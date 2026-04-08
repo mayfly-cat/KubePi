@@ -114,7 +114,7 @@ func pageHandler() iris.Handler {
 func logHandler() iris.Handler {
 	return func(ctx *context.Context) {
 		method := strings.ToLower(ctx.Method())
-		if method != "post" && method != "delete" && method != "put" {
+		if method != "post" && method != "delete" && method != "put" && method != "patch" {
 			ctx.Next()
 			return
 		}
@@ -146,7 +146,7 @@ func logHandler() iris.Handler {
 
 		skipBodyName := strings.Contains(currentPath, "upload")
 		var body []byte
-		if !skipBodyName && method == "post" {
+		if !skipBodyName && (method == "post" || method == "put" || method == "patch") {
 			data, err := ctx.GetBody()
 			if err == nil {
 				body = data
@@ -171,6 +171,7 @@ func logHandler() iris.Handler {
 			OperationDomain:     draft.OperationDomain,
 			SpecificInformation: draft.SpecificInformation,
 		}
+		opRecord := fmt.Sprintf("操作：%s | 资源类型：%s | 目标：%s", draft.Operation, draft.OperationDomain, draft.SpecificInformation)
 		auditLog := v1System.AuditLog{
 			Operator:            profile.Name,
 			Cluster:             clusterName,
@@ -180,6 +181,7 @@ func logHandler() iris.Handler {
 			Operation:           draft.Operation,
 			OperationDomain:     draft.OperationDomain,
 			SpecificInformation: draft.SpecificInformation,
+			OperationRecord:     opRecord,
 			ClientIp:            requestip.FromRequest(ctx.Request()),
 			UserAgent:           ctx.GetHeader("User-Agent"),
 			StatusCode:          status,
@@ -424,6 +426,7 @@ func AddV1Route(app iris.Party) {
 	authParty.Use(roleAccessHandler())
 	authParty.Use(resourceNameInvalidHandler())
 	authParty.Use(logHandler())
+	authParty.Use(whitelistAuditHandler())
 	authParty.Get("/", apiResourceHandler(authParty))
 	user.Install(authParty)
 	cluster.Install(authParty)

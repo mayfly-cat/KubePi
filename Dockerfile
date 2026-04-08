@@ -54,53 +54,14 @@ RUN ARCH=$(uname -m) \
     && update-ca-certificates \
     && sed -i "s/nobody:\//nobody:\/nonexistent/g" /etc/passwd
 
-# 下载 kubectl（使用独立的 RUN 命令以避免复杂的嵌套逻辑）
-RUN ARCH=$(uname -m) \
-    && case $ARCH in \
-        aarch64) ARCH="arm64";; \
-        x86_64) ARCH="amd64";; \
-        *) ARCH="amd64";; \
-    esac \
-    && KUBECTL_VERSION="v1.22.1" \
-    && PRIMARY_URL="https://kubeoperator.oss-cn-beijing.aliyuncs.com/kubepi/kubectl/${KUBECTL_VERSION}/${ARCH}/kubectl" \
-    && FALLBACK_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
-    && echo "Attempting to download kubectl (ARCH: ${ARCH}, VERSION: ${KUBECTL_VERSION})" \
-    && DOWNLOADED=false \
-    && echo "Trying primary URL with curl..." \
-    && (curl -sLf --connect-timeout 15 --max-time 90 "$PRIMARY_URL" -o /usr/bin/kubectl \
-        || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$PRIMARY_URL" -o /usr/bin/kubectl) \
-        || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$PRIMARY_URL" -o /usr/bin/kubectl)) \
-    && if [ -f /usr/bin/kubectl ] && [ -s /usr/bin/kubectl ]; then \
-        DOWNLOADED=true; \
-        echo "kubectl downloaded successfully from primary URL (curl)"; \
-    fi \
-    && if [ "$DOWNLOADED" != "true" ]; then \
-        echo "curl failed, trying wget for primary URL (with --no-check-certificate)..." \
-        && wget --no-check-certificate --timeout=30 --tries=2 "$PRIMARY_URL" -O /usr/bin/kubectl 2>&1 \
-        && if [ -f /usr/bin/kubectl ] && [ -s /usr/bin/kubectl ]; then \
-            DOWNLOADED=true; \
-            echo "kubectl downloaded successfully from primary URL (wget)"; \
-        fi; \
-    fi \
-    && if [ "$DOWNLOADED" != "true" ]; then \
-        echo "Primary URL failed, trying fallback URL: $FALLBACK_URL" \
-        && (curl -sLf --connect-timeout 15 --max-time 90 "$FALLBACK_URL" -o /usr/bin/kubectl \
-            || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$FALLBACK_URL" -o /usr/bin/kubectl) \
-            || (sleep 3 && curl -sLf --connect-timeout 15 --max-time 90 "$FALLBACK_URL" -o /usr/bin/kubectl)) \
-        && if [ -f /usr/bin/kubectl ] && [ -s /usr/bin/kubectl ]; then \
-            DOWNLOADED=true; \
-            echo "kubectl downloaded successfully from fallback URL"; \
-        fi; \
-    fi \
-    && if [ "$DOWNLOADED" != "true" ]; then \
-        echo "ERROR: Failed to download kubectl from all sources"; \
-        echo "Primary URL: $PRIMARY_URL"; \
-        echo "Fallback URL: $FALLBACK_URL"; \
-        exit 1; \
-    fi \
+# 安装 kubectl：使用 Alpine community 仓库（与上面 apk 已配置的 mirrors.aliyun.com 同源），
+# 避免在构建容器内 curl 外网（dl.k8s.io / OSS）时因 DNS 等问题失败（curl exit 6）。
+RUN (grep -q "alpine/v3.16/community" /etc/apk/repositories || echo "http://mirrors.aliyun.com/alpine/v3.16/community" >> /etc/apk/repositories) \
+    && apk update --no-cache \
+    && apk add --no-cache kubectl \
     && chmod +x /usr/bin/kubectl \
     && echo "Verifying kubectl installation..." \
-    && /usr/bin/kubectl version --client --short \
+    && /usr/bin/kubectl version --client \
     && echo "kubectl installed successfully"
 
 # 安装 kubectl-aliases

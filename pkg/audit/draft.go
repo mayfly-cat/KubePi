@@ -25,11 +25,15 @@ type WriteLogDraft struct {
 // BuildWriteLogDraft 根据路由与请求体解析写操作日志草稿；若不应记录则 ok 为 false。
 func BuildWriteLogDraft(method, path, currentPath string, body []byte, skipBodyName bool) (draft WriteLogDraft, ok bool) {
 	method = strings.ToLower(method)
-	if method != "post" && method != "delete" && method != "put" {
+	if method != "post" && method != "delete" && method != "put" && method != "patch" {
 		return WriteLogDraft{}, false
 	}
 
+	// 面向用户的动作语义：大多数 patch 等价于“修改”
 	draft.Operation = method
+	if method == "patch" {
+		draft.Operation = "put"
+	}
 
 	if strings.Contains(path, "ldap") {
 		if strings.Contains(path, "import") {
@@ -43,6 +47,13 @@ func BuildWriteLogDraft(method, path, currentPath string, body []byte, skipBodyN
 		}
 		if strings.Contains(path, "login") {
 			draft.Operation = "testLogin"
+		}
+	}
+
+	// Workload patch 语义识别：将技术上的 PATCH 映射为用户看到的操作。
+	if method == "patch" {
+		if workloadOp := detectWorkloadPatchOperation(path, body); workloadOp != "" {
+			draft.Operation = workloadOp
 		}
 	}
 
@@ -97,4 +108,41 @@ func BuildWriteLogDraft(method, path, currentPath string, body []byte, skipBodyN
 	}
 
 	return draft, true
+}
+
+func detectWorkloadPatchOperation(path string, body []byte) string {
+	lowerPath := strings.ToLower(path)
+	if !isWorkloadPath(lowerPath) {
+		return ""
+	}
+	lowerBody := strings.ToLower(string(body))
+
+	switch {
+	case strings.Contains(lowerPath, "/rollback") ||
+		strings.Contains(lowerBody, "rollbackto") ||
+		strings.Contains(lowerBody, "deployment.kubernetes.io/revision"):
+		return "rollback"
+	case strings.Contains(lowerPath, "/reschedule") ||
+		strings.Contains(lowerBody, "\"reschedule\"") ||
+		strings.Contains(lowerBody, "kubepi.io/rescheduledat"):
+		return "reschedule"
+	case strings.Contains(lowerBody, "kubectl.kubernetes.io/restartedat"):
+		return "restart"
+	case strings.Contains(lowerBody, "\"paused\":true"):
+		return "pause"
+	case strings.Contains(lowerBody, "\"paused\":false"):
+		return "resume"
+	case strings.Contains(lowerPath, "/scale") || strings.Contains(lowerBody, "\"replicas\""):
+		return "scale"
+	default:
+		return ""
+	}
+}
+
+func isWorkloadPath(path string) bool {
+	return strings.Contains(path, "/deployments/") ||
+		strings.Contains(path, "/statefulsets/") ||
+		strings.Contains(path, "/daemonsets/") ||
+		strings.Contains(path, "/jobs/") ||
+		strings.Contains(path, "/cronjobs/")
 }

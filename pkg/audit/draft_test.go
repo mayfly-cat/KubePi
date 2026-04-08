@@ -42,3 +42,68 @@ func TestBuildWriteLogDraft_clusterScopedPut(t *testing.T) {
 		t.Fatalf("info: %+v", d)
 	}
 }
+
+func TestBuildWriteLogDraft_patchDefaultToPut(t *testing.T) {
+	d, ok := BuildWriteLogDraft("patch", "clusters/c1/configmaps/cfg1", "clusters/:name/configmaps/:configMapName", []byte(`{"data":{"k":"v"}}`), false)
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if d.Operation != "put" {
+		t.Fatalf("expected put for generic patch, got %q", d.Operation)
+	}
+}
+
+func TestBuildWriteLogDraft_workloadPatchSemantic(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		body string
+		want string
+	}{
+		{
+			name: "restart deployment",
+			path: "clusters/c1/namespaces/ns1/deployments/d1",
+			body: `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"2026-04-08T10:00:00Z"}}}}}`,
+			want: "restart",
+		},
+		{
+			name: "scale deployment",
+			path: "clusters/c1/namespaces/ns1/deployments/d1/scale",
+			body: `{"spec":{"replicas":3}}`,
+			want: "scale",
+		},
+		{
+			name: "pause deployment",
+			path: "clusters/c1/namespaces/ns1/deployments/d1",
+			body: `{"spec":{"paused":true}}`,
+			want: "pause",
+		},
+		{
+			name: "resume deployment",
+			path: "clusters/c1/namespaces/ns1/deployments/d1",
+			body: `{"spec":{"paused":false}}`,
+			want: "resume",
+		},
+		{
+			name: "rollback deployment",
+			path: "clusters/c1/namespaces/ns1/deployments/d1/rollback",
+			body: `{}`,
+			want: "rollback",
+		},
+		{
+			name: "reschedule deployment",
+			path: "clusters/c1/namespaces/ns1/deployments/d1/reschedule",
+			body: `{}`,
+			want: "reschedule",
+		},
+	}
+	for _, tt := range tests {
+		d, ok := BuildWriteLogDraft("patch", tt.path, "clusters/:name/namespaces/:namespace/deployments/:name", []byte(tt.body), false)
+		if !ok {
+			t.Fatalf("%s: expected ok", tt.name)
+		}
+		if d.Operation != tt.want {
+			t.Fatalf("%s: want %q, got %q", tt.name, tt.want, d.Operation)
+		}
+	}
+}

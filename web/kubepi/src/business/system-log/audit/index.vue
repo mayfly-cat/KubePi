@@ -4,9 +4,6 @@
       <complex-table :search-config="searchConfig" :data="data" :pagination-config="paginationConfig" @search="search">
         <el-table-column :label="$t('business.cluster.cluster')" prop="cluster" fix />
         <el-table-column :label="$t('business.system.operator')" prop="operator" fix />
-        <el-table-column :label="$t('business.system.http_method')" prop="httpMethod" fix />
-        <el-table-column :label="$t('business.system.request_path')" prop="requestPath" min-width="200" show-overflow-tooltip />
-        <el-table-column :label="$t('business.system.resource')" prop="resource" fix />
         <el-table-column :label="$t('business.system.operation')" prop="operation" fix>
           <template v-slot:default="{row}">
             {{ translate(row.operation) }}
@@ -73,14 +70,8 @@ export default {
             defaultOperator: "eq",
           },
           {
-            field: "httpMethod",
-            label: this.$t("business.system.http_method"),
-            component: "FuComplexInput",
-            defaultOperator: "eq",
-          },
-          {
-            field: "resource",
-            label: this.$t("business.system.resource"),
+            field: "operationDomain",
+            label: this.$t("business.system.operation_domain"),
             component: "FuComplexInput",
             defaultOperator: "eq",
           },
