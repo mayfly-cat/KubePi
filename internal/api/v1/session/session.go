@@ -23,6 +23,7 @@ import (
 	"github.com/KubeOperator/kubepi/pkg/logging"
 	"github.com/KubeOperator/kubepi/pkg/network/ip"
 	"github.com/KubeOperator/kubepi/pkg/terminal"
+	"github.com/KubeOperator/kubepi/pkg/util/requestip"
 	"github.com/asdine/storm/v3"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
@@ -181,7 +182,7 @@ func (h *Handler) Login() iris.Handler {
 func (h *Handler) SaveLoginLog(ctx *context.Context, userName string) {
 	var logItem v1System.LoginLog
 	logItem.UserName = userName
-	logItem.Ip = ctx.RemoteAddr()
+	logItem.Ip = requestip.FromRequest(ctx.Request())
 	qqWry, err := ip.NewQQwry()
 	if err != nil {
 		server.Logger().Errorf("load qqwry datas failed: %s", err)
@@ -197,7 +198,7 @@ func (h *Handler) AggregateResourcePermissions(name string) (map[string][]string
 		Kind: "User",
 		Name: name,
 	}, common.DBOptions{})
-	if err != nil && !errors.As(err, &storm.ErrNotFound) {
+	if err != nil && !errors.Is(err, storm.ErrNotFound) {
 		return nil, err
 	}
 
@@ -207,7 +208,7 @@ func (h *Handler) AggregateResourcePermissions(name string) (map[string][]string
 	}
 
 	rs, err := h.roleService.GetByNames(roleNames, common.DBOptions{})
-	if err != nil && !errors.As(err, &storm.ErrNotFound) {
+	if err != nil && !errors.Is(err, storm.ErrNotFound) {
 		return nil, err
 	}
 	mapping := map[string]*collectons.StringSet{}
