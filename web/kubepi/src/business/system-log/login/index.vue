@@ -4,7 +4,7 @@
       <el-table-column :label="$t('business.system.username')" prop="userName" fix />
       <el-table-column :label="$t('business.system.ip')" prop="ip" fix />
       <el-table-column :label="$t('business.system.city')" prop="city" fix />
-      <el-table-column :label="$t('commons.table.created_time')" fix>
+      <el-table-column :label="$t('business.system.login_time')" fix>
         <template v-slot:default="{row}">
           {{ row.createAt | datetimeFormat }}
         </template>

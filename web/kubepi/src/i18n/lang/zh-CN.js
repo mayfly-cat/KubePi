@@ -250,6 +250,8 @@ const message = {
             result_ok: "成功",
             result_fail: "失败",
             login_log: "登录日志",
+            login_time: "登录时间",
+            operation_time: "操作时间",
             username: "用户名",
             client_ip: "客户端 IP",
             ip: "登录IP",

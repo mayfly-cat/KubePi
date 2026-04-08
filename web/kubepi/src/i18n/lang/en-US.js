@@ -250,6 +250,8 @@ const message = {
             result_ok: "Success",
             result_fail: "Failure",
             login_log: "Login Logs",
+            login_time: "Login Time",
+            operation_time: "Operation Time",
             username: "Username",
             client_ip: "Client IP",
             ip: "Login ip",

@@ -20,7 +20,7 @@
           <el-tag v-else type="danger" size="small">{{ $t("business.system.result_fail") }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="$t('commons.table.created_time')" fix width="168">
+      <el-table-column :label="$t('business.system.operation_time')" fix width="168">
         <template v-slot:default="{row}">
           {{ row.createAt | datetimeFormat }}
         </template>
