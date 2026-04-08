@@ -29,11 +29,7 @@ func BuildWriteLogDraft(method, path, currentPath string, body []byte, skipBodyN
 		return WriteLogDraft{}, false
 	}
 
-	// 面向用户的动作语义：大多数 patch 等价于“修改”
-	draft.Operation = method
-	if method == "patch" {
-		draft.Operation = "put"
-	}
+	draft.Operation = InferWriteOperation(method, path, body)
 
 	if strings.Contains(path, "ldap") {
 		if strings.Contains(path, "import") {
@@ -47,13 +43,6 @@ func BuildWriteLogDraft(method, path, currentPath string, body []byte, skipBodyN
 		}
 		if strings.Contains(path, "login") {
 			draft.Operation = "testLogin"
-		}
-	}
-
-	// Workload patch 语义识别：将技术上的 PATCH 映射为用户看到的操作。
-	if method == "patch" {
-		if workloadOp := detectWorkloadPatchOperation(path, body); workloadOp != "" {
-			draft.Operation = workloadOp
 		}
 	}
 
@@ -108,6 +97,22 @@ func BuildWriteLogDraft(method, path, currentPath string, body []byte, skipBodyN
 	}
 
 	return draft, true
+}
+
+// InferWriteOperation 将 HTTP 写方法映射为用户可读的业务动作。
+func InferWriteOperation(method, path string, body []byte) string {
+	method = strings.ToLower(method)
+	if method != "post" && method != "delete" && method != "put" && method != "patch" {
+		return method
+	}
+	if method == "patch" {
+		// 面向用户的动作语义：大多数 patch 等价于“修改”
+		if workloadOp := detectWorkloadPatchOperation(path, body); workloadOp != "" {
+			return workloadOp
+		}
+		return "put"
+	}
+	return method
 }
 
 func detectWorkloadPatchOperation(path string, body []byte) string {

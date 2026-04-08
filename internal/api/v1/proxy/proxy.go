@@ -24,6 +24,7 @@ import (
 	ingresshistory "github.com/KubeOperator/kubepi/internal/service/v1/ingresshistory"
 	v1SystemService "github.com/KubeOperator/kubepi/internal/service/v1/system"
 	pkgV1 "github.com/KubeOperator/kubepi/pkg/api/v1"
+	"github.com/KubeOperator/kubepi/pkg/audit"
 	"github.com/KubeOperator/kubepi/pkg/kubernetes"
 	"github.com/KubeOperator/kubepi/pkg/util/requestip"
 	"github.com/kataras/iris/v12"
@@ -384,6 +385,7 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 			_ = h.saveIngressHistoryAfterOperation(ctx, name, proxyPath, rawResp, resp.StatusCode, profile)
 		}
 		if shouldAuditProxyMethod(requestMethod) {
+			operation := audit.InferWriteOperation(strings.ToLower(requestMethod), proxyPath, requestBody)
 			domain := "k8s"
 			if target.resource != "" {
 				domain = fmt.Sprintf("k8s_%s", target.resource)
@@ -402,13 +404,16 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 				specificInformation, ruleAdds, ruleRemoves, operationRecord = buildIngressRuleSummary(
 					specificInformation, requestMethod, beforeRaw, rawResp, ingressOK, statusCode)
 			}
+			if operationRecord == "" {
+				operationRecord = fmt.Sprintf("操作：%s | 资源类型：%s | 目标：%s", operation, domain, specificInformation)
+			}
 			auditLog := v1System.AuditLog{
 				Operator:            profile.Name,
 				Cluster:             name,
 				HttpMethod:          strings.ToLower(requestMethod),
 				RequestPath:         ctx.Request().URL.Path,
 				Resource:            target.resource,
-				Operation:           strings.ToLower(requestMethod),
+				Operation:           operation,
 				OperationDomain:     domain,
 				SpecificInformation: specificInformation,
 				OperationRecord:     operationRecord,

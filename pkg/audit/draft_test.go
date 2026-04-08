@@ -107,3 +107,25 @@ func TestBuildWriteLogDraft_workloadPatchSemantic(t *testing.T) {
 		}
 	}
 }
+
+func TestInferWriteOperation(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		want   string
+	}{
+		{name: "put keep put", method: "put", path: "clusters/c1/users/u1", body: `{}`, want: "put"},
+		{name: "post keep post", method: "post", path: "clusters/c1/users", body: `{}`, want: "post"},
+		{name: "delete keep delete", method: "delete", path: "clusters/c1/users/u1", body: `{}`, want: "delete"},
+		{name: "patch generic to put", method: "patch", path: "clusters/c1/configmaps/c1", body: `{"data":{"k":"v"}}`, want: "put"},
+		{name: "patch restart semantic", method: "patch", path: "clusters/c1/namespaces/ns1/deployments/d1", body: `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"x"}}}}}`, want: "restart"},
+	}
+	for _, tt := range tests {
+		got := InferWriteOperation(tt.method, tt.path, []byte(tt.body))
+		if got != tt.want {
+			t.Fatalf("%s: want %q got %q", tt.name, tt.want, got)
+		}
+	}
+}
