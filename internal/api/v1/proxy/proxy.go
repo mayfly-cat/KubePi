@@ -2,12 +2,15 @@ package proxy
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -345,8 +348,9 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 		}
 		target := parseK8sTarget(proxyPath)
 		beforeRaw := []byte(nil)
-		if target.resource == "ingresses" {
+		if shouldTrackBeforeStateForAudit(target.resource) {
 			beforeRaw = fetchResourceForAudit(&httpClient, *apiUrl, requestMethod)
+			log.Printf("[proxy-audit-debug] fetched before state resource=%s method=%s path=%s bytes=%d", target.resource, requestMethod, proxyPath, len(beforeRaw))
 		}
 
 		// 如果是 Ingress 的 PUT 请求，在更新之前保存当前版本
@@ -403,6 +407,13 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 				ingressOK := isSuccessfulIngressWrite(statusCode, requestMethod, rawResp)
 				specificInformation, ruleAdds, ruleRemoves, operationRecord = buildIngressRuleSummary(
 					specificInformation, requestMethod, beforeRaw, rawResp, ingressOK, statusCode)
+			} else {
+				yamlSummary, hasYamlSummary := buildYamlChangeSummary(target.resource, requestMethod, beforeRaw, requestBody, rawResp, statusCode)
+				if hasYamlSummary {
+					specificInformation = appendSpecificInformationChange(specificInformation, yamlSummary)
+					operationRecord = fmt.Sprintf("操作：%s | 资源类型：%s | 目标：%s | YAML变更：%s", operation, domain, specificInformation, yamlSummary)
+					log.Printf("[proxy-audit-debug] yaml summary resource=%s method=%s summary=%s", target.resource, requestMethod, yamlSummary)
+				}
 			}
 			if operationRecord == "" {
 				operationRecord = fmt.Sprintf("操作：%s | 资源类型：%s | 目标：%s", operation, domain, specificInformation)
@@ -956,6 +967,191 @@ func buildIngressRuleSummary(baseInfo, method string, before, after []byte, ingr
 		opRecord = "路由规则无增删（可能仅更新了注解等其他字段）"
 	}
 	return baseInfo, adds, removes, opRecord
+}
+
+func shouldTrackBeforeStateForAudit(resource string) bool {
+	if resource == "ingresses" {
+		return true
+	}
+	return shouldTrackYamlAuditResource(resource)
+}
+
+func shouldTrackYamlAuditResource(resource string) bool {
+	switch resource {
+	case "deployments":
+		return true
+	default:
+		return false
+	}
+}
+
+func appendSpecificInformationChange(baseInfo, changeSummary string) string {
+	if changeSummary == "" {
+		return baseInfo
+	}
+	if baseInfo == "" || baseInfo == "-" {
+		return fmt.Sprintf("变更：%s", changeSummary)
+	}
+	return fmt.Sprintf("%s | 变更：%s", baseInfo, changeSummary)
+}
+
+func buildYamlChangeSummary(resource, method string, before, requestBody, responseBody []byte, statusCode int) (string, bool) {
+	if !shouldTrackYamlAuditResource(resource) {
+		return "", false
+	}
+	if statusCode < 200 || statusCode >= 300 {
+		return fmt.Sprintf("请求未成功（HTTP %d），未应用 YAML 变更", statusCode), true
+	}
+
+	after := responseBody
+	if len(bytes.TrimSpace(after)) == 0 {
+		after = requestBody
+	}
+	beforeFields := extractResourceAuditFields(resource, before)
+	afterFields := extractResourceAuditFields(resource, after)
+	adds, removes, updates := diffAuditFields(beforeFields, afterFields)
+	if method == http.MethodDelete && len(adds) == 0 && len(removes) == 0 && len(updates) == 0 {
+		removes, _, _ = diffAuditFields(map[string]string{}, beforeFields)
+	}
+	if method == http.MethodPost && len(adds) == 0 && len(removes) == 0 && len(updates) == 0 {
+		adds, _, _ = diffAuditFields(map[string]string{}, afterFields)
+	}
+
+	summary := formatFieldDiffSummary(adds, removes, updates)
+	if summary == "" {
+		summary = "关键字段无变更（可能仅更新了 annotations/labels）"
+	}
+	return summary, true
+}
+
+func extractResourceAuditFields(resource string, raw []byte) map[string]string {
+	switch resource {
+	case "deployments":
+		return extractDeploymentAuditFields(raw)
+	default:
+		return map[string]string{}
+	}
+}
+
+func extractDeploymentAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := map[string]string{}
+	spec, _ := obj["spec"].(map[string]interface{})
+	if spec == nil {
+		return fields
+	}
+	setIfPresent(fields, "spec.replicas", spec["replicas"])
+	if strategy, ok := spec["strategy"]; ok {
+		fields["spec.strategy"] = toJSONString(strategy)
+	}
+	if template, ok := spec["template"].(map[string]interface{}); ok {
+		if tmplSpec, ok := template["spec"].(map[string]interface{}); ok {
+			extractContainerFields(fields, "spec.template.spec.containers", tmplSpec["containers"])
+			extractContainerFields(fields, "spec.template.spec.initContainers", tmplSpec["initContainers"])
+		}
+	}
+	return fields
+}
+
+func extractContainerFields(fields map[string]string, prefix string, src interface{}) {
+	containers, ok := src.([]interface{})
+	if !ok {
+		return
+	}
+	for i := range containers {
+		container, ok := containers[i].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, _ := container["name"].(string)
+		if name == "" {
+			name = fmt.Sprintf("index-%d", i)
+		}
+		base := fmt.Sprintf("%s.%s", prefix, name)
+		setIfPresent(fields, base+".image", container["image"])
+		setIfPresent(fields, base+".imagePullPolicy", container["imagePullPolicy"])
+		setIfPresent(fields, base+".command", container["command"])
+		setIfPresent(fields, base+".args", container["args"])
+		if ports, ok := container["ports"]; ok {
+			fields[base+".ports"] = toJSONString(ports)
+		}
+		if resources, ok := container["resources"]; ok {
+			fields[base+".resources"] = toJSONString(resources)
+		}
+		if env, ok := container["env"]; ok {
+			fields[base+".env"] = toJSONString(env)
+		}
+	}
+}
+
+func parseJSONObject(raw []byte) (map[string]interface{}, bool) {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, false
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, false
+	}
+	return obj, true
+}
+
+func setIfPresent(fields map[string]string, key string, val interface{}) {
+	if val == nil {
+		return
+	}
+	fields[key] = toJSONString(val)
+}
+
+func toJSONString(val interface{}) string {
+	data, err := json.Marshal(val)
+	if err != nil {
+		return fmt.Sprintf("%v", val)
+	}
+	return string(data)
+}
+
+func diffAuditFields(before, after map[string]string) (adds, removes, updates []string) {
+	for key, afterVal := range after {
+		beforeVal, ok := before[key]
+		if !ok {
+			adds = append(adds, fmt.Sprintf("%s=%s", key, afterVal))
+			continue
+		}
+		if beforeVal != afterVal {
+			updates = append(updates, fmt.Sprintf("%s:%s -> %s", key, beforeVal, afterVal))
+		}
+	}
+	for key, beforeVal := range before {
+		if _, ok := after[key]; !ok {
+			removes = append(removes, fmt.Sprintf("%s=%s", key, beforeVal))
+		}
+	}
+	sort.Strings(adds)
+	sort.Strings(removes)
+	sort.Strings(updates)
+	return adds, removes, updates
+}
+
+func formatFieldDiffSummary(adds, removes, updates []string) string {
+	parts := make([]string, 0, 3)
+	if len(adds) > 0 {
+		parts = append(parts, "新增: "+strings.Join(adds, "；"))
+	}
+	if len(removes) > 0 {
+		parts = append(parts, "删除: "+strings.Join(removes, "；"))
+	}
+	if len(updates) > 0 {
+		parts = append(parts, "更新: "+strings.Join(updates, "；"))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func shortHash(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])[:8]
 }
 
 func parseResourceName(path string) (string, error) {
