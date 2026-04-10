@@ -54,7 +54,11 @@ func BuildWriteLogDraft(method, path, currentPath string, body []byte, skipBodyN
 				draft.SpecificInformation = pathResource[1]
 			}
 		} else {
-			draft.OperationDomain = fmt.Sprintf("%s_%s", pathResource[0], pathResource[2])
+			resourceTypeIndex := 2
+			if len(pathResource) > 4 && pathResource[2] == "namespaces" {
+				resourceTypeIndex = 4
+			}
+			draft.OperationDomain = fmt.Sprintf("%s_%s", pathResource[0], pathResource[resourceTypeIndex])
 			if method != "post" {
 				if len(pathResource) > 3 {
 					draft.SpecificInformation = fmt.Sprintf("[%s] %s", pathResource[1], pathResource[3])

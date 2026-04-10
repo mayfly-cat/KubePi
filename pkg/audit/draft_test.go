@@ -53,6 +53,17 @@ func TestBuildWriteLogDraft_patchDefaultToPut(t *testing.T) {
 	}
 }
 
+func TestBuildWriteLogDraft_clusterNamespaceCreateResourceDomain(t *testing.T) {
+	body := []byte(`{"metadata":{"name":"d1"}}`)
+	d, ok := BuildWriteLogDraft("post", "clusters/c1/namespaces/ns1/deployments", "clusters/:name/namespaces/:namespace/deployments", body, false)
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if d.OperationDomain != "clusters_deployments" {
+		t.Fatalf("expected domain clusters_deployments, got %q", d.OperationDomain)
+	}
+}
+
 func TestBuildWriteLogDraft_workloadPatchSemantic(t *testing.T) {
 	tests := []struct {
 		name string
