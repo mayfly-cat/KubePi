@@ -3,14 +3,13 @@ package proxy
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -350,7 +349,6 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 		beforeRaw := []byte(nil)
 		if shouldTrackBeforeStateForAudit(target.resource) {
 			beforeRaw = fetchResourceForAudit(&httpClient, *apiUrl, requestMethod)
-			log.Printf("[proxy-audit-debug] fetched before state resource=%s method=%s path=%s bytes=%d", target.resource, requestMethod, proxyPath, len(beforeRaw))
 		}
 
 		// 如果是 Ingress 的 PUT 请求，在更新之前保存当前版本
@@ -412,7 +410,6 @@ func (h *Handler) KubernetesAPIProxy() iris.Handler {
 				if hasYamlSummary {
 					specificInformation = appendSpecificInformationChange(specificInformation, yamlSummary)
 					operationRecord = fmt.Sprintf("操作：%s | 资源类型：%s | 目标：%s | YAML变更：%s", operation, domain, specificInformation, yamlSummary)
-					log.Printf("[proxy-audit-debug] yaml summary resource=%s method=%s summary=%s", target.resource, requestMethod, yamlSummary)
 				}
 			}
 			if operationRecord == "" {
@@ -728,31 +725,89 @@ func parseK8sTarget(proxyPath string) k8sTarget {
 		}
 	}
 	t := k8sTarget{}
-	if len(parts) == 0 {
+	n := len(parts)
+	if n == 0 {
 		return t
 	}
 
-	for i := 0; i < len(parts); i++ {
-		if parts[i] == "namespaces" && i+2 < len(parts) {
-			t.namespace = parts[i+1]
-			t.resource = parts[i+2]
-			if i+3 < len(parts) {
-				t.name = parts[i+3]
-			}
-			if i+4 < len(parts) {
-				t.subresource = parts[i+4]
-			}
-			return t
+	// .../namespaces/{ns}/... 需与 Namespace 自身路径 /api/v1/namespaces/{name} 区分
+	for i := 0; i < n; i++ {
+		if parts[i] != "namespaces" || i+1 >= n {
+			continue
 		}
+		nsSeg := parts[i+1]
+		if i+2 < n {
+			next := parts[i+2]
+			if next == "status" || next == "finalize" {
+				t.resource = "namespaces"
+				t.name = nsSeg
+				t.subresource = next
+				return t
+			}
+			// /namespaces/{ns}/{resource}/{name}(/sub)?
+			if i+3 < n {
+				t.namespace = nsSeg
+				t.resource = next
+				t.name = parts[i+3]
+				if i+4 < n {
+					t.subresource = parts[i+4]
+				}
+				return t
+			}
+		}
+		// /namespaces 或 /namespaces/{name}：Namespace 资源
+		t.resource = "namespaces"
+		t.name = nsSeg
+		return t
 	}
 
-	if len(parts) >= 2 {
-		t.resource = parts[len(parts)-2]
-		t.name = parts[len(parts)-1]
+	// /api/{version}/{resource}(/name(/sub)?)?
+	if n >= 3 && parts[0] == "api" && isK8sAPIVersion(parts[1]) {
+		t.resource = parts[2]
+		if n >= 4 {
+			t.name = parts[3]
+		}
+		if n >= 5 {
+			t.subresource = parts[4]
+		}
+		return t
+	}
+
+	// /apis/{group}/{version}/{resource}(/name(/sub)?)?
+	if n >= 4 && parts[0] == "apis" {
+		t.resource = parts[3]
+		if n >= 5 {
+			t.name = parts[4]
+		}
+		if n >= 6 {
+			t.subresource = parts[5]
+		}
+		return t
+	}
+
+	if n >= 2 {
+		t.resource = parts[n-2]
+		t.name = parts[n-1]
 	} else {
-		t.resource = parts[len(parts)-1]
+		t.resource = parts[n-1]
 	}
 	return t
+}
+
+func isK8sAPIVersion(s string) bool {
+	if len(s) < 2 || s[0] != 'v' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		if c >= '0' && c <= '9' {
+			return true
+		}
+		if c != '.' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+			return false
+		}
+	}
+	return false
 }
 
 func extractK8sObjectNameFromBody(body []byte) string {
@@ -978,7 +1033,8 @@ func shouldTrackBeforeStateForAudit(resource string) bool {
 
 func shouldTrackYamlAuditResource(resource string) bool {
 	switch resource {
-	case "deployments":
+	case "deployments", "services", "configmaps", "secrets", "serviceaccounts",
+		"roles", "rolebindings", "clusterroles", "clusterrolebindings":
 		return true
 	default:
 		return false
@@ -1003,10 +1059,15 @@ func buildYamlChangeSummary(resource, method string, before, requestBody, respon
 		return fmt.Sprintf("请求未成功（HTTP %d），未应用 YAML 变更", statusCode), true
 	}
 
+	before = stripJSONStatus(before)
+	requestBody = stripJSONStatus(requestBody)
+
 	after := responseBody
 	if len(bytes.TrimSpace(after)) == 0 {
 		after = requestBody
 	}
+	after = stripJSONStatus(after)
+
 	beforeFields := extractResourceAuditFields(resource, before)
 	afterFields := extractResourceAuditFields(resource, after)
 	adds, removes, updates := diffAuditFields(beforeFields, afterFields)
@@ -1019,18 +1080,72 @@ func buildYamlChangeSummary(resource, method string, before, requestBody, respon
 
 	summary := formatFieldDiffSummary(adds, removes, updates)
 	if summary == "" {
-		summary = "关键字段无变更（可能仅更新了 annotations/labels）"
+		summary = "关键字段无变更（可能仅更新了未跟踪字段）"
 	}
 	return summary, true
+}
+
+func stripJSONStatus(raw []byte) []byte {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return raw
+	}
+	delete(obj, "status")
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 func extractResourceAuditFields(resource string, raw []byte) map[string]string {
 	switch resource {
 	case "deployments":
 		return extractDeploymentAuditFields(raw)
+	case "services":
+		return extractServiceAuditFields(raw)
+	case "configmaps":
+		return extractConfigMapAuditFields(raw)
+	case "secrets":
+		return extractSecretAuditFields(raw)
+	case "serviceaccounts":
+		return extractServiceAccountAuditFields(raw)
+	case "roles", "clusterroles":
+		return extractRoleLikeAuditFields(raw)
+	case "rolebindings", "clusterrolebindings":
+		return extractBindingAuditFields(raw)
 	default:
 		return map[string]string{}
 	}
+}
+
+func extractMetadataAuditFields(obj map[string]interface{}) map[string]string {
+	fields := make(map[string]string)
+	md, ok := obj["metadata"].(map[string]interface{})
+	if !ok {
+		return fields
+	}
+	if labels, ok := md["labels"].(map[string]interface{}); ok {
+		keys := make([]string, 0, len(labels))
+		for k := range labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fields["metadata.labels."+k] = toJSONString(labels[k])
+		}
+	}
+	if ann, ok := md["annotations"].(map[string]interface{}); ok {
+		keys := make([]string, 0, len(ann))
+		for k := range ann {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fields["metadata.annotations."+k] = toJSONString(ann[k])
+		}
+	}
+	return fields
 }
 
 func extractDeploymentAuditFields(raw []byte) map[string]string {
@@ -1038,7 +1153,7 @@ func extractDeploymentAuditFields(raw []byte) map[string]string {
 	if !ok {
 		return map[string]string{}
 	}
-	fields := map[string]string{}
+	fields := extractMetadataAuditFields(obj)
 	spec, _ := obj["spec"].(map[string]interface{})
 	if spec == nil {
 		return fields
@@ -1052,6 +1167,146 @@ func extractDeploymentAuditFields(raw []byte) map[string]string {
 			extractContainerFields(fields, "spec.template.spec.containers", tmplSpec["containers"])
 			extractContainerFields(fields, "spec.template.spec.initContainers", tmplSpec["initContainers"])
 		}
+	}
+	return fields
+}
+
+func extractServiceAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	spec, _ := obj["spec"].(map[string]interface{})
+	if spec == nil {
+		return fields
+	}
+	keys := []string{
+		"type", "clusterIP", "clusterIPs", "sessionAffinity", "sessionAffinityConfig",
+		"loadBalancerIP", "loadBalancerClass", "externalTrafficPolicy", "allocateLoadBalancerNodePorts",
+		"ports", "selector", "externalName", "publishNotReadyAddresses", "trafficDistribution",
+		"internalTrafficPolicy", "ipFamilies", "ipFamilyPolicy",
+	}
+	for _, k := range keys {
+		setIfPresent(fields, "spec."+k, spec[k])
+	}
+	return fields
+}
+
+func extractConfigMapAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	if data, ok := obj["data"].(map[string]interface{}); ok {
+		keys := make([]string, 0, len(data))
+		for k := range data {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := data[k]
+			s, _ := v.(string)
+			if len(s) > 200 {
+				fields["data."+k] = "sha256:" + shortHash(s)
+			} else {
+				fields["data."+k] = s
+			}
+		}
+	}
+	if bd, ok := obj["binaryData"].(map[string]interface{}); ok {
+		keys := make([]string, 0, len(bd))
+		for k := range bd {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fields["binaryData."+k] = "<binary>"
+		}
+	}
+	return fields
+}
+
+func extractSecretAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	if data, ok := obj["data"].(map[string]interface{}); ok {
+		keys := make([]string, 0, len(data))
+		for k := range data {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := data[k]
+			s, _ := v.(string)
+			fields["data."+k] = "sha256:" + shortHash(s)
+		}
+	}
+	if st, ok := obj["stringData"].(map[string]interface{}); ok {
+		keys := make([]string, 0, len(st))
+		for k := range st {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := st[k]
+			s, _ := v.(string)
+			if len(s) > 200 {
+				fields["stringData."+k] = "sha256:" + shortHash(s)
+			} else {
+				fields["stringData."+k] = s
+			}
+		}
+	}
+	return fields
+}
+
+func extractServiceAccountAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	setIfPresent(fields, "automountServiceAccountToken", obj["automountServiceAccountToken"])
+	if s, ok := obj["secrets"]; ok {
+		fields["secrets"] = toJSONString(s)
+	}
+	if ips, ok := obj["imagePullSecrets"]; ok {
+		fields["imagePullSecrets"] = toJSONString(ips)
+	}
+	return fields
+}
+
+func extractRoleLikeAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	if rules, ok := obj["rules"]; ok {
+		fields["rules"] = toJSONString(rules)
+	}
+	if agg, ok := obj["aggregationRule"]; ok {
+		fields["aggregationRule"] = toJSONString(agg)
+	}
+	return fields
+}
+
+func extractBindingAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	if rr, ok := obj["roleRef"]; ok {
+		fields["roleRef"] = toJSONString(rr)
+	}
+	if sub, ok := obj["subjects"]; ok {
+		fields["subjects"] = toJSONString(sub)
 	}
 	return fields
 }

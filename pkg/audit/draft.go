@@ -127,9 +127,10 @@ func detectWorkloadPatchOperation(path string, body []byte) string {
 	lowerBody := strings.ToLower(string(body))
 
 	switch {
+	// 仅在实际回滚 API 或请求体包含 rollbackTo 时识别为回滚。
+	// 注意：deployment.kubernetes.io/revision 会出现在普通更新/伸缩/换镜像的请求或对象中，不能用作回滚依据。
 	case strings.Contains(lowerPath, "/rollback") ||
-		strings.Contains(lowerBody, "rollbackto") ||
-		strings.Contains(lowerBody, "deployment.kubernetes.io/revision"):
+		strings.Contains(lowerBody, "rollbackto"):
 		return "rollback"
 	case strings.Contains(lowerPath, "/reschedule") ||
 		strings.Contains(lowerBody, "\"reschedule\"") ||
