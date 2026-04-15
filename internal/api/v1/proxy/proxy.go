@@ -1033,7 +1033,7 @@ func shouldTrackBeforeStateForAudit(resource string) bool {
 
 func shouldTrackYamlAuditResource(resource string) bool {
 	switch resource {
-	case "deployments", "services", "configmaps", "secrets", "serviceaccounts",
+	case "namespaces", "deployments", "services", "endpoints", "configmaps", "secrets", "serviceaccounts",
 		"roles", "rolebindings", "clusterroles", "clusterrolebindings":
 		return true
 	default:
@@ -1100,10 +1100,14 @@ func stripJSONStatus(raw []byte) []byte {
 
 func extractResourceAuditFields(resource string, raw []byte) map[string]string {
 	switch resource {
+	case "namespaces":
+		return extractNamespaceAuditFields(raw)
 	case "deployments":
 		return extractDeploymentAuditFields(raw)
 	case "services":
 		return extractServiceAuditFields(raw)
+	case "endpoints":
+		return extractEndpointsAuditFields(raw)
 	case "configmaps":
 		return extractConfigMapAuditFields(raw)
 	case "secrets":
@@ -1117,6 +1121,18 @@ func extractResourceAuditFields(resource string, raw []byte) map[string]string {
 	default:
 		return map[string]string{}
 	}
+}
+
+func extractNamespaceAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	if spec, ok := obj["spec"].(map[string]interface{}); ok {
+		setIfPresent(fields, "spec.finalizers", spec["finalizers"])
+	}
+	return fields
 }
 
 func extractMetadataAuditFields(obj map[string]interface{}) map[string]string {
@@ -1189,6 +1205,18 @@ func extractServiceAuditFields(raw []byte) map[string]string {
 	}
 	for _, k := range keys {
 		setIfPresent(fields, "spec."+k, spec[k])
+	}
+	return fields
+}
+
+func extractEndpointsAuditFields(raw []byte) map[string]string {
+	obj, ok := parseJSONObject(raw)
+	if !ok {
+		return map[string]string{}
+	}
+	fields := extractMetadataAuditFields(obj)
+	if subsets, ok := obj["subsets"]; ok {
+		fields["subsets"] = toJSONString(subsets)
 	}
 	return fields
 }

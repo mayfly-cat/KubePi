@@ -84,6 +84,12 @@ func TestBuildWriteLogDraft_workloadPatchSemantic(t *testing.T) {
 			want: "scale",
 		},
 		{
+			name: "update image should not be scale",
+			path: "clusters/c1/namespaces/ns1/deployments/d1",
+			body: `{"spec":{"replicas":2,"template":{"spec":{"containers":[{"name":"app","image":"nginx:1.27"}]}}}}`,
+			want: "put",
+		},
+		{
 			name: "pause deployment",
 			path: "clusters/c1/namespaces/ns1/deployments/d1",
 			body: `{"spec":{"paused":true}}`,

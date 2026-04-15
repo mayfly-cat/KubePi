@@ -142,7 +142,9 @@ func detectWorkloadPatchOperation(path string, body []byte) string {
 		return "pause"
 	case strings.Contains(lowerBody, "\"paused\":false"):
 		return "resume"
-	case strings.Contains(lowerPath, "/scale") || strings.Contains(lowerBody, "\"replicas\""):
+	// 伸缩应优先以 /scale 子资源为准；仅包含 replicas 不能直接判定为伸缩，
+	// 否则「修改镜像版本」等同时携带 replicas 的请求会被误判。
+	case strings.Contains(lowerPath, "/scale"):
 		return "scale"
 	default:
 		return ""

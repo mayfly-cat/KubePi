@@ -27,6 +27,10 @@ func TestParseK8sTarget(t *testing.T) {
 			want: k8sTarget{resource: "namespaces", name: "kube-system", subresource: "status"},
 		},
 		{
+			path: "api/v1/namespaces/kube-system/finalize",
+			want: k8sTarget{resource: "namespaces", name: "kube-system", subresource: "finalize"},
+		},
+		{
 			path: "api/v1/namespaces/default/deployments/nginx",
 			want: k8sTarget{namespace: "default", resource: "deployments", name: "nginx"},
 		},
