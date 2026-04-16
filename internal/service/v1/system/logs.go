@@ -1,6 +1,7 @@
 package system
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -30,6 +31,16 @@ type service struct {
 	common.DefaultDBService
 }
 
+// emitAuditDebugLog 直接输出 AuditLog JSON，字段与 DB 模型一致，便于日志采集解析。
+func emitAuditDebugLog(logItem *v1System.AuditLog) {
+	raw, marshalErr := json.Marshal(logItem)
+	if marshalErr != nil {
+		fmt.Printf("[audit-debug] marshal_failed err=%s\n", marshalErr.Error())
+		return
+	}
+	fmt.Printf("[audit-debug] %s\n", string(raw))
+}
+
 func (u *service) CreateOperationLog(log *v1System.OperationLog, options common.DBOptions) {
 	db := u.GetDB(options)
 	log.UUID = uuid.New().String()
@@ -45,9 +56,13 @@ func (u *service) CreateAuditLog(log *v1System.AuditLog, options common.DBOption
 	log.UUID = uuid.New().String()
 	log.CreateAt = time.Now()
 	log.UpdateAt = time.Now()
+	emitAuditDebugLog(log)
 	if err := db.Save(log); err != nil {
+		emitAuditDebugLog(log)
 		fmt.Printf("audit log %s %s by user %s write failure, error is %s", log.HttpMethod, log.RequestPath, log.Operator, err.Error())
+		return
 	}
+	emitAuditDebugLog(log)
 }
 
 func (u *service) CreateLoginLog(log *v1System.LoginLog, options common.DBOptions) {
