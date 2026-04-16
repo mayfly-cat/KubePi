@@ -56,7 +56,6 @@ func (u *service) CreateAuditLog(log *v1System.AuditLog, options common.DBOption
 	log.UUID = uuid.New().String()
 	log.CreateAt = time.Now()
 	log.UpdateAt = time.Now()
-	emitAuditDebugLog(log)
 	if err := db.Save(log); err != nil {
 		emitAuditDebugLog(log)
 		fmt.Printf("audit log %s %s by user %s write failure, error is %s", log.HttpMethod, log.RequestPath, log.Operator, err.Error())
